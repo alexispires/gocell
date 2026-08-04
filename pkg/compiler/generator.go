@@ -11,9 +11,12 @@ import (
 )
 
 // exportVarTemplate generates the block that exports a new variable to the shared Registry:
-// either the pointer value directly (KeepAlive on the pointee) or a heap copy (KeepAlive on
-// its address), so the GC never frees the memory referenced by the raw pointer stored in
-// the Registry.
+// either the pointer value directly (KeepAlive on the pointee) or the address of the cell's
+// own local (KeepAlive on that same address), so the GC never frees the memory referenced by
+// the raw pointer stored in the Registry. The variable is never touched again after this
+// block runs (it's the last thing before `return nil`), so taking its address directly is
+// safe -- no intermediate heap copy is needed, which also avoids an unnecessary full-value
+// copy for large value types (a big array or struct, as opposed to a slice header).
 var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	var ptr_{{.}} unsafe.Pointer
 	var keepAlive_{{.}} any
 	val_{{.}} := reflect.ValueOf({{.}})
@@ -21,9 +24,8 @@ var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	var ptr_
 		ptr_{{.}} = unsafe.Pointer(val_{{.}}.Pointer())
 		keepAlive_{{.}} = {{.}}
 	} else {
-		heapVal_{{.}} := {{.}}
-		ptr_{{.}} = unsafe.Pointer(&heapVal_{{.}})
-		keepAlive_{{.}} = &heapVal_{{.}}
+		ptr_{{.}} = unsafe.Pointer(&{{.}})
+		keepAlive_{{.}} = &{{.}}
 	}
 	ctx.SetPointer({{printf "%q" .}}, fmt.Sprintf("%T", {{.}}), ptr_{{.}}, keepAlive_{{.}})
 `))
