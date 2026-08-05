@@ -15,17 +15,26 @@ type CellContent struct {
 	FuncDecls []ast.Decl
 	Stmts     []ast.Stmt
 	RawCode   string
+	// Fset is the FileSet that Imports/TypeDecls/FuncDecls/Stmts' positions are
+	// relative to. AnalyzeCell reuses it (rather than reparsing the cell) so that
+	// go/types resolves identifiers against these same node objects, not disconnected
+	// copies -- required for AnalyzeCell's rewrite pass to mutate the real nodes that
+	// GeneratePluginCode will later print.
+	Fset *token.FileSet
 }
 
 // ParseCell parses a cell's code, intelligently splitting imports, types, functions and statements.
 func ParseCell(code string) (*CellContent, error) {
+	fset := token.NewFileSet()
+
 	trimmed := strings.TrimSpace(code)
 	if trimmed == "" {
-		return &CellContent{RawCode: code}, nil
+		return &CellContent{RawCode: code, Fset: fset}, nil
 	}
 
 	res := &CellContent{
 		RawCode: code,
+		Fset:    fset,
 	}
 
 	// 1. Split lines to separate imports, top-level declarations and statements
@@ -88,8 +97,7 @@ func ParseCell(code string) (*CellContent, error) {
 	// 2. Extract imports
 	if len(importLines) > 0 {
 		impSrc := "package main\n\n" + strings.Join(importLines, "\n")
-		fsetImp := token.NewFileSet()
-		if impNode, errImp := parser.ParseFile(fsetImp, "imp.go", impSrc, parser.ImportsOnly); errImp == nil {
+		if impNode, errImp := parser.ParseFile(fset, "imp.go", impSrc, parser.ImportsOnly); errImp == nil {
 			res.Imports = append(res.Imports, impNode.Imports...)
 		}
 	}
@@ -97,8 +105,7 @@ func ParseCell(code string) (*CellContent, error) {
 	// 3. Extract types and functions
 	if len(declLines) > 0 {
 		declSrc := "package main\n\n" + strings.Join(declLines, "\n")
-		fsetDecl := token.NewFileSet()
-		if declNode, errDecl := parser.ParseFile(fsetDecl, "decl.go", declSrc, parser.ParseComments); errDecl == nil {
+		if declNode, errDecl := parser.ParseFile(fset, "decl.go", declSrc, parser.ParseComments); errDecl == nil {
 			for _, decl := range declNode.Decls {
 				switch d := decl.(type) {
 				case *ast.GenDecl:
@@ -115,8 +122,7 @@ func ParseCell(code string) (*CellContent, error) {
 	// 4. Extract statements
 	if len(stmtLines) > 0 {
 		stmtSrc := "package main\n\nfunc __gocell_wrapper() {\n" + strings.Join(stmtLines, "\n") + "\n}"
-		fsetStmt := token.NewFileSet()
-		if stmtNode, errStmt := parser.ParseFile(fsetStmt, "stmt.go", stmtSrc, parser.ParseComments); errStmt == nil {
+		if stmtNode, errStmt := parser.ParseFile(fset, "stmt.go", stmtSrc, parser.ParseComments); errStmt == nil {
 			for _, decl := range stmtNode.Decls {
 				if f, ok := decl.(*ast.FuncDecl); ok && f.Name.Name == "__gocell_wrapper" {
 					if f.Body != nil {
