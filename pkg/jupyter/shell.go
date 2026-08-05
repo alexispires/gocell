@@ -160,8 +160,8 @@ func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []by
 	}
 
 	replyContent, _ := json.Marshal(map[string]any{
-		"status":          status,
-		"execution_count": count,
+		"status":           status,
+		"execution_count":  count,
 		"user_expressions": map[string]any{},
 	})
 
