@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/importer"
 	"go/parser"
-	"go/printer"
 	"go/token"
 	"go/types"
 	"sort"
@@ -94,12 +93,9 @@ func analyzeWithTypeChecker(
 	}()
 
 	candidates := sortedSymbolNames(existing)
-	src := buildAnalysisSource(cell, candidates, existing, importTracker, typeRegistry)
-
-	fset := token.NewFileSet()
-	file, parseErr := parser.ParseFile(fset, "gocell_analysis.go", src, 0)
-	if parseErr != nil {
-		return nil, fmt.Errorf("could not analyze the cell: %w", parseErr)
+	file, buildErr := buildAnalysisFile(cell, candidates, existing, importTracker, typeRegistry)
+	if buildErr != nil {
+		return nil, buildErr
 	}
 
 	info := &types.Info{
@@ -116,7 +112,7 @@ func analyzeWithTypeChecker(
 		Importer:                 importer.Default(),
 		DisableUnusedImportCheck: true,
 	}
-	conf.Check("main", fset, []*ast.File{file}, info)
+	conf.Check("main", cell.Fset, []*ast.File{file}, info)
 
 	fn := findFuncDecl(file, analysisFuncName)
 	if fn == nil || fn.Body == nil || len(fn.Body.List) < len(candidates) {
@@ -186,9 +182,12 @@ func analyzeWithTypeChecker(
 	return res, nil
 }
 
-// buildAnalysisSource renders the cell as a self-contained file for type-checking: the
-// session's accumulated declarations, then the Registry symbols as locals, then the cell's
-// statements.
+// buildAnalysisFile constructs the throwaway function go/types type-checks: the session's
+// accumulated declarations, then the Registry symbols as locals, then -- spliced in directly
+// as the cell's own real *ast.Stmt nodes, not reparsed from printed text -- the cell's
+// statements. Splicing (rather than the print-then-reparse this replaced) means info.Uses/
+// info.Defs, once Check runs, key off the exact same nodes GeneratePluginCode will later
+// print, which the rewrite pass (rewriteUsedSymbolAccess) needs to mutate them in place.
 //
 // This is a model of the file GeneratePluginCode will emit, and only one property of that
 // file has to be modelled faithfully: every name the cell references must resolve here to
@@ -205,15 +204,19 @@ func analyzeWithTypeChecker(
 // Changing the scope structure of Execute() -- moving hydration into a nested block, wrapping
 // the cell's statements -- breaks that coupling, and shadowing_test.go is what catches it:
 // those cells only compile if both files agree on what shadows what.
-func buildAnalysisSource(
+//
+// Candidate declarations are parsed from a source positioned, in cell.Fset, after cell.Stmts'
+// own file (cell.Stmts was parsed first, back in ParseCell) -- verified empirically that this
+// does not confuse go/types' resolution: unlike Scope.LookupParent called with an external
+// position, Check's own internal resolution is driven by AST structural order within each
+// block, not raw cross-file Pos() comparison, so no position-clearing workaround is needed.
+func buildAnalysisFile(
 	cell *CellContent,
 	candidates []string,
 	existing map[string]*runtime.Symbol,
 	importTracker *ImportTracker,
 	typeRegistry *runtime.TypeRegistry,
-) string {
-	fset := token.NewFileSet()
-
+) (*ast.File, error) {
 	// This cell's own declarations win over a same-named one from an earlier cell, matching
 	// how GeneratePluginCode registers them moments later.
 	decls := typeRegistry.AllTypes()
@@ -221,33 +224,18 @@ func buildAnalysisSource(
 		decls[decl.key] = decl.code
 	}
 
-	var body strings.Builder
+	var declBody strings.Builder
 	for _, key := range sortedKeys(decls) {
-		body.WriteString(decls[key])
-		body.WriteString("\n\n")
+		declBody.WriteString(decls[key])
+		declBody.WriteString("\n\n")
 	}
-
-	body.WriteString("func " + analysisFuncName + "() {\n")
-	for _, name := range candidates {
-		fmt.Fprintf(&body, "\tvar %s %s\n", name, registrySymbolType(existing[name]))
-	}
-	for _, stmt := range cell.Stmts {
-		var buf strings.Builder
-		if err := printer.Fprint(&buf, fset, stmt); err != nil {
-			continue
-		}
-		for _, line := range strings.Split(buf.String(), "\n") {
-			body.WriteString("\t" + line + "\n")
-		}
-	}
-	body.WriteString("}\n")
+	declBody.WriteString("func " + analysisFuncName + "() {}\n")
 
 	// A private tracker so the cell's own imports are visible here without mutating session
 	// state that GeneratePluginCode is about to update itself.
 	tracker := NewImportTracker()
-	for path, spec := range importTracker.AllImports() {
+	for _, spec := range importTracker.AllImports() {
 		tracker.AddImport(spec.Alias, spec.Path)
-		_ = path
 	}
 	for _, imp := range cell.Imports {
 		alias := ""
@@ -257,12 +245,41 @@ func buildAnalysisSource(
 		tracker.AddImport(alias, imp.Path.Value)
 	}
 
-	var sb strings.Builder
-	sb.WriteString("package main\n\n")
-	sb.WriteString(tracker.GenerateImportBlockForCode(body.String()))
-	sb.WriteString("\n")
-	sb.WriteString(body.String())
-	return sb.String()
+	var src strings.Builder
+	src.WriteString("package main\n\n")
+	src.WriteString(tracker.GenerateImportBlockForCode(declBody.String()))
+	src.WriteString("\n")
+	src.WriteString(declBody.String())
+
+	file, err := parser.ParseFile(cell.Fset, "gocell_analysis.go", src.String(), 0)
+	if err != nil {
+		return nil, fmt.Errorf("could not analyze the cell: %w", err)
+	}
+	fn := findFuncDecl(file, analysisFuncName)
+	if fn == nil {
+		return nil, fmt.Errorf("could not analyze the cell: %s is missing from the analyzed source", analysisFuncName)
+	}
+
+	var candSrc strings.Builder
+	candSrc.WriteString("package main\n\nfunc __gocell_candidates() {\n")
+	for _, name := range candidates {
+		fmt.Fprintf(&candSrc, "\tvar %s %s\n", name, registrySymbolType(existing[name]))
+	}
+	candSrc.WriteString("}\n")
+	candFile, err := parser.ParseFile(cell.Fset, "gocell_candidates.go", candSrc.String(), 0)
+	if err != nil {
+		return nil, fmt.Errorf("could not analyze the cell: %w", err)
+	}
+	candFn := findFuncDecl(candFile, "__gocell_candidates")
+	if candFn == nil || candFn.Body == nil {
+		return nil, fmt.Errorf("could not analyze the cell: candidate declarations are missing from the analyzed source")
+	}
+
+	// Splice the cell's own real statement nodes after the candidate declarations. cell.Stmts
+	// holds pointers, so this shares node identity with the original slice -- no copy.
+	fn.Body.List = append(candFn.Body.List, cell.Stmts...)
+
+	return file, nil
 }
 
 func findFuncDecl(file *ast.File, name string) *ast.FuncDecl {
