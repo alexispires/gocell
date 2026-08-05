@@ -10,19 +10,27 @@ import (
 	"text/template"
 )
 
-// exportVarTemplate generates the block that exports a new variable to the shared Registry:
-// either the pointer value directly (KeepAlive on the pointee) or the address of the cell's
-// own local (KeepAlive on that same address), so the GC never frees the memory referenced by
-// the raw pointer stored in the Registry. The variable is never touched again after this
-// block runs (it's the last thing before `return nil`), so taking its address directly is
-// safe -- no intermediate heap copy is needed, which also avoids an unnecessary full-value
-// copy for large value types (a big array or struct, as opposed to a slice header).
-var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	var ptr_{{.}} unsafe.Pointer
+// exportVarTemplate generates the block that exports a new variable to the shared Registry: a
+// freshly allocated box shaped after the variable's *dynamic* type (via reflect.New), with
+// KeepAlive on that box so the GC never frees it. Registry.TypeName is likewise always the
+// dynamic type (`%T`), which is why the box must be too: `&x` would instead box x's *static*
+// declared type, and the two diverge whenever x is interface-typed (its own storage is a
+// two-word interface header, not the single data word its dynamic pointer/value occupies) --
+// hydration would then reinterpret that header's bytes as the dynamic type and read garbage.
+// Going through reflect.New keeps every type uniform -- including pointer- and interface-typed
+// values -- so a later cell reassigning a used symbol always has a correctly shaped box to
+// write back into, without the pointer/value branching this replaced.
+// Falls back to `&x` only when x has no dynamic type to reflect on at all (a nil interface,
+// `var x SomeInterface` never assigned) -- the same case the prior code also could not really
+// give a usable box to.
+var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	val_{{.}} := reflect.ValueOf({{.}})
+	var ptr_{{.}} unsafe.Pointer
 	var keepAlive_{{.}} any
-	val_{{.}} := reflect.ValueOf({{.}})
-	if val_{{.}}.IsValid() && val_{{.}}.Kind() == reflect.Pointer {
-		ptr_{{.}} = unsafe.Pointer(val_{{.}}.Pointer())
-		keepAlive_{{.}} = {{.}}
+	if val_{{.}}.IsValid() {
+		box_{{.}} := reflect.New(val_{{.}}.Type())
+		box_{{.}}.Elem().Set(val_{{.}})
+		ptr_{{.}} = unsafe.Pointer(box_{{.}}.Pointer())
+		keepAlive_{{.}} = box_{{.}}.Interface()
 	} else {
 		ptr_{{.}} = unsafe.Pointer(&{{.}})
 		keepAlive_{{.}} = &{{.}}
@@ -73,17 +81,10 @@ func GeneratePluginCode(
 		for name, sym := range analysis.UsedSymbols {
 			cleanTypeName := registrySymbolType(sym)
 
-			if strings.HasPrefix(cleanTypeName, "*") {
-				bodySb.WriteString(fmt.Sprintf("\tvar %s %s\n", name, cleanTypeName))
-				bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
-				bodySb.WriteString(fmt.Sprintf("\t\t%s = (%s)(ptr)\n", name, cleanTypeName))
-				bodySb.WriteString("\t}\n")
-			} else {
-				bodySb.WriteString(fmt.Sprintf("\tvar %s %s\n", name, cleanTypeName))
-				bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
-				bodySb.WriteString(fmt.Sprintf("\t\t%s = *(*%s)(ptr)\n", name, cleanTypeName))
-				bodySb.WriteString("\t}\n")
-			}
+			bodySb.WriteString(fmt.Sprintf("\tvar %s %s\n", name, cleanTypeName))
+			bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
+			bodySb.WriteString(fmt.Sprintf("\t\t%s = *(*%s)(ptr)\n", name, cleanTypeName))
+			bodySb.WriteString("\t}\n")
 		}
 		bodySb.WriteString("\n")
 	}
@@ -121,11 +122,9 @@ func GeneratePluginCode(
 		for name, sym := range analysis.UsedSymbols {
 			cleanTypeName := registrySymbolType(sym)
 
-			if !strings.HasPrefix(cleanTypeName, "*") {
-				bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
-				bodySb.WriteString(fmt.Sprintf("\t\t*(*%s)(ptr) = %s\n", cleanTypeName, name))
-				bodySb.WriteString("\t}\n")
-			}
+			bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
+			bodySb.WriteString(fmt.Sprintf("\t\t*(*%s)(ptr) = %s\n", cleanTypeName, name))
+			bodySb.WriteString("\t}\n")
 		}
 	}
 
