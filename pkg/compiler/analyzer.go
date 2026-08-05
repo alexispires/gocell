@@ -181,6 +181,12 @@ func analyzeWithTypeChecker(
 		})
 	}
 
+	// Rewrite every occurrence of a used symbol to go through its pointer directly, now that
+	// GeneratePluginCode declares x_ptr instead of hydrating a local copy (see
+	// rewriteUsedSymbolAccess). fn.Body.List[len(candidates):] and cell.Stmts are the same
+	// underlying nodes (spliced in buildAnalysisFile), so this mutates cell.Stmts in place.
+	rewriteUsedSymbolAccess(fn.Body.List[len(candidates):], info, candidateObjs)
+
 	return res, nil
 }
 
@@ -194,10 +200,6 @@ func analyzeWithTypeChecker(
 // parenthesization handles every syntactic context (selector, call, address-of, deref)
 // automatically once the rewritten tree is printed -- `&x` becomes `&(*x_ptr)`, `x.Field`
 // becomes `(*x_ptr).Field`, and so on, with no per-context logic needed here.
-//
-// Not yet called from analyzeWithTypeChecker (infrastructure only at this point) -- wiring it
-// in requires GeneratePluginCode to also stop hydrating a copy and start declaring `x_ptr`,
-// which is a later, single atomic change (both sides of the contract have to move together).
 func rewriteUsedSymbolAccess(stmts []ast.Stmt, info *types.Info, candidateObjs map[types.Object]string) {
 	pre := func(c *astutil.Cursor) bool {
 		ident, ok := c.Node().(*ast.Ident)

@@ -10,32 +10,24 @@ import (
 	"text/template"
 )
 
-// exportVarTemplate generates the block that exports a new variable to the shared Registry: a
-// freshly allocated box shaped after the variable's *dynamic* type (via reflect.New), with
-// KeepAlive on that box so the GC never frees it. Registry.TypeName is likewise always the
-// dynamic type (`%T`), which is why the box must be too: `&x` would instead box x's *static*
-// declared type, and the two diverge whenever x is interface-typed (its own storage is a
-// two-word interface header, not the single data word its dynamic pointer/value occupies) --
-// hydration would then reinterpret that header's bytes as the dynamic type and read garbage.
-// Going through reflect.New keeps every type uniform -- including pointer- and interface-typed
-// values -- so a later cell reassigning a used symbol always has a correctly shaped box to
-// write back into, without the pointer/value branching this replaced.
-// Falls back to `&x` only when x has no dynamic type to reflect on at all (a nil interface,
-// `var x SomeInterface` never assigned) -- the same case the prior code also could not really
-// give a usable box to.
-var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	val_{{.}} := reflect.ValueOf({{.}})
-	var ptr_{{.}} unsafe.Pointer
-	var keepAlive_{{.}} any
-	if val_{{.}}.IsValid() {
-		box_{{.}} := reflect.New(val_{{.}}.Type())
-		box_{{.}}.Elem().Set(val_{{.}})
-		ptr_{{.}} = unsafe.Pointer(box_{{.}}.Pointer())
-		keepAlive_{{.}} = box_{{.}}.Interface()
-	} else {
-		ptr_{{.}} = unsafe.Pointer(&{{.}})
-		keepAlive_{{.}} = &{{.}}
-	}
-	ctx.SetPointer({{printf "%q" .}}, fmt.Sprintf("%T", {{.}}), ptr_{{.}}, keepAlive_{{.}})
+// exportVarTemplate generates the block that exports a new variable to the shared Registry:
+// the address of the cell's own local, with KeepAlive on that same address so the GC never
+// frees the memory referenced by the raw pointer stored in the Registry. This must be x's own
+// storage, not a copy -- a closure declared in the same cell that already captured &x (to
+// mutate x) needs the Registry to keep pointing at that exact memory, or a later cell's read
+// through the Registry and the closure's own mutation would silently diverge onto two
+// different boxes holding two different values.
+//
+// The type name recorded is `%T` of &x, not of x itself: `%T` of x directly reports x's
+// *dynamic* type, which is wrong whenever x's *static* declared type is an interface (its own
+// storage is a two-word interface header, not shaped like whatever concrete value it holds) --
+// reading it back through that dynamic type would reinterpret the header's bytes as if they
+// were the dynamic value. `%T` of &x is always exactly "*" followed by x's own static type,
+// spelled out, regardless of what x's dynamic value happens to be -- registrySymbolType strips
+// that one leading "*" back off.
+var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	ptr_{{.}} := unsafe.Pointer(&{{.}})
+	keepAlive_{{.}} := &{{.}}
+	ctx.SetPointer({{printf "%q" .}}, fmt.Sprintf("%T", &{{.}}), ptr_{{.}}, keepAlive_{{.}})
 `))
 
 // GeneratePluginCode generates the complete Go source of a cell plugin for compilation.
@@ -77,19 +69,15 @@ func GeneratePluginCode(
 	bodySb.WriteString("func Execute(ctx *runtime.Context) error {\n")
 
 	if len(analysis.UsedSymbols) > 0 {
-		bodySb.WriteString("\t// Hydrate existing symbols\n")
+		bodySb.WriteString("\t// Point directly at existing symbols -- no copy, no write-back\n")
 		for name, sym := range analysis.UsedSymbols {
 			cleanTypeName := registrySymbolType(sym)
-
-			bodySb.WriteString(fmt.Sprintf("\tvar %s %s\n", name, cleanTypeName))
-			bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
-			bodySb.WriteString(fmt.Sprintf("\t\t%s = *(*%s)(ptr)\n", name, cleanTypeName))
-			bodySb.WriteString("\t}\n")
+			bodySb.WriteString(fmt.Sprintf("\t%s_ptr := (*%s)(ctx.GetPointer(%q))\n", name, cleanTypeName, name))
 		}
 		bodySb.WriteString("\n")
 	}
 
-	bodySb.WriteString("\t// Cell statements\n")
+	bodySb.WriteString("\t// Cell statements (used symbols already rewritten to go through their _ptr)\n")
 	for i, stmt := range cell.Stmts {
 		isLast := i == len(cell.Stmts)-1
 
@@ -114,17 +102,6 @@ func GeneratePluginCode(
 			for _, line := range lines {
 				bodySb.WriteString("\t" + line + "\n")
 			}
-		}
-	}
-
-	if len(analysis.UsedSymbols) > 0 {
-		bodySb.WriteString("\n\t// Write modified symbols back to the Registry heap\n")
-		for name, sym := range analysis.UsedSymbols {
-			cleanTypeName := registrySymbolType(sym)
-
-			bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
-			bodySb.WriteString(fmt.Sprintf("\t\t*(*%s)(ptr) = %s\n", cleanTypeName, name))
-			bodySb.WriteString("\t}\n")
 		}
 	}
 
@@ -214,14 +191,16 @@ func cellDeclarations(cell *CellContent) []cellDecl {
 }
 
 // registrySymbolType renders a Registry symbol's Go type as it should appear in generated
-// source. The stored name comes from a plugin's %T, which qualifies cell-declared types with
-// the plugin's own "main" package -- a qualifier that means nothing in the next cell, which
-// re-declares those types itself.
+// source. The stored name comes from a plugin's `%T` of &x (see exportVarTemplate), which is
+// always exactly x's own static type with one extra leading "*" -- stripped here -- and
+// qualifies cell-declared types with the plugin's own "main" package -- a qualifier that means
+// nothing in the next cell, which re-declares those types itself.
 func registrySymbolType(sym *runtime.Symbol) string {
 	typeName := sym.TypeName
 	if typeName == "" {
 		return "any"
 	}
+	typeName = strings.TrimPrefix(typeName, "*")
 	typeName = strings.ReplaceAll(typeName, "*main.", "*")
 	return strings.ReplaceAll(typeName, "main.", "")
 }

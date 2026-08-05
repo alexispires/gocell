@@ -86,17 +86,19 @@ func TestRewriteUsedSymbolAccess(t *testing.T) {
 		seed map[string]string
 		want string
 	}{
-		{"deref", "*foo = 5", map[string]string{"foo": "*int"}, "**foo_ptr = 5\n"},
-		{"reassignment", "foo = &Bar{N: 1}", map[string]string{"foo": "*Bar"}, "*foo_ptr = &Bar{N: 1}\n"},
-		{"selector", "n := foo.N", map[string]string{"foo": "*Bar"}, "n := (*foo_ptr).N\n"},
-		{"call", "foo.Method()", map[string]string{"foo": "*Bar"}, "(*foo_ptr).\n\tMethod()\n"},
-		{"addressOf", "bar := &foo", map[string]string{"foo": "int"}, "bar := &*foo_ptr\n"},
-		{"compoundAssign", "x += 1", map[string]string{"x": "int"}, "*x_ptr += 1\n"},
-		{"incDec", "x++", map[string]string{"x": "int"}, "*x_ptr++\n"},
+		// Seeds carry the %T-of-&x convention (see registrySymbolType): one extra leading "*"
+		// beyond the symbol's own real type.
+		{"deref", "*foo = 5", map[string]string{"foo": "**int"}, "**foo_ptr = 5\n"},
+		{"reassignment", "foo = &Bar{N: 1}", map[string]string{"foo": "**Bar"}, "*foo_ptr = &Bar{N: 1}\n"},
+		{"selector", "n := foo.N", map[string]string{"foo": "**Bar"}, "n := (*foo_ptr).N\n"},
+		{"call", "foo.Method()", map[string]string{"foo": "**Bar"}, "(*foo_ptr).\n\tMethod()\n"},
+		{"addressOf", "bar := &foo", map[string]string{"foo": "*int"}, "bar := &*foo_ptr\n"},
+		{"compoundAssign", "x += 1", map[string]string{"x": "*int"}, "*x_ptr += 1\n"},
+		{"incDec", "x++", map[string]string{"x": "*int"}, "*x_ptr++\n"},
 		{
 			"rangeOver",
 			"for i, v := range xs {\n_ = i\n_ = v\n}",
-			map[string]string{"xs": "[]int"},
+			map[string]string{"xs": "*[]int"},
 			"for i, v := range *xs_ptr {\n\t_ = i\n\t_ = v\n}\n",
 		},
 	}
@@ -122,7 +124,7 @@ if true {
 }
 after := count
 `
-	got := rewriteForTest(t, code, map[string]string{"count": "int"})
+	got := rewriteForTest(t, code, map[string]string{"count": "*int"})
 	if strings.Contains(got, `"shadow"`) == false {
 		t.Fatalf("expected the shadow's own string literal to survive untouched, got:\n%s", got)
 	}

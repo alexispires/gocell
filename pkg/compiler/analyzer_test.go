@@ -51,7 +51,7 @@ func TestAnalyzeTopLevelConstIsNotExported(t *testing.T) {
 // hydrated (not re-exported) and fresh exported. The redefinition rewrite deliberately leaves
 // this `:=` alone -- rewriting it to `=` would be a compile error, since fresh is new.
 func TestAnalyzeMixedRedeclarationReusesExistingSymbol(t *testing.T) {
-	res := analyzeCell(t, "x, fresh := 1, 2", map[string]string{"x": "int"})
+	res := analyzeCell(t, "x, fresh := 1, 2", map[string]string{"x": "*int"})
 
 	if _, used := res.UsedSymbols["x"]; !used {
 		t.Fatalf("Expected the existing 'x' to be hydrated, got UsedSymbols=%v", res.UsedSymbols)
@@ -76,7 +76,7 @@ if true {
 	_ = count
 }
 after := count
-`, map[string]string{"count": "int"})
+`, map[string]string{"count": "*int"})
 
 	if _, used := res.UsedSymbols["count"]; !used {
 		t.Fatalf("Expected the outer candidate 'count' to be hydrated (referenced before and after the shadow), got UsedSymbols=%v", res.UsedSymbols)
