@@ -40,7 +40,18 @@ func getFreePorts(count int) ([]int, error) {
 	return ports, nil
 }
 
-func TestJupyterZMQIntegration(t *testing.T) {
+// zmqTestKernel is a running gocell kernel plus fake shell and IOPub-subscriber clients,
+// wired the same way TestJupyterZMQIntegration sets one up -- factored out so a second test
+// can also inspect IOPub content without duplicating the ~60 lines of socket plumbing.
+type zmqTestKernel struct {
+	clientShell zmq4.Socket
+	iopubSub    zmq4.Socket
+	key         []byte
+}
+
+func newZMQTestKernel(t *testing.T) *zmqTestKernel {
+	t.Helper()
+
 	ports, err := getFreePorts(5)
 	if err != nil {
 		t.Fatalf("Failed to reserve ports: %v", err)
@@ -58,7 +69,6 @@ func TestJupyterZMQIntegration(t *testing.T) {
 		Key:             "test-secret-key-12345",
 	}
 
-	// Write a temporary connection file
 	tmpDir := t.TempDir()
 	connPath := filepath.Join(tmpDir, "connection.json")
 	connData, _ := json.Marshal(conn)
@@ -68,25 +78,23 @@ func TestJupyterZMQIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
 	}
-	defer wsMgr.CleanUp()
+	t.Cleanup(func() { _ = wsMgr.CleanUp() })
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 
-	// 1. Start the gocell Kernel server
 	iopubAddr := fmt.Sprintf("%s://%s:%d", conn.Transport, conn.IP, conn.IOPubPort)
 	iopubSocket := zmq4.NewPub(ctx)
 	if err := iopubSocket.Listen(iopubAddr); err != nil {
 		t.Fatalf("Failed to listen on IOPub: %v", err)
 	}
-	defer iopubSocket.Close()
+	t.Cleanup(func() { iopubSocket.Close() })
 
 	iopub := jupyter.NewIOPubNotifier(iopubSocket, []byte(conn.Key))
 
 	if err := jupyter.StartHeartbeat(ctx, conn); err != nil {
 		t.Fatalf("Heartbeat failed: %v", err)
 	}
-
 	if err := jupyter.StartControlLoop(ctx, conn, iopub, cancel); err != nil {
 		t.Fatalf("Control failed: %v", err)
 	}
@@ -95,23 +103,89 @@ func TestJupyterZMQIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
 	}
+	go func() { _ = server.StartShellLoop(ctx, iopub) }()
 
-	go func() {
-		_ = server.StartShellLoop(ctx, iopub)
-	}()
-
-	// Wait briefly for the listeners to initialize
-	time.Sleep(100 * time.Millisecond)
-
-	// 2. Fake ZMQ client simulating a Jupyter Client (VS Code / JupyterLab)
 	shellAddr := fmt.Sprintf("%s://%s:%d", conn.Transport, conn.IP, conn.ShellPort)
 	clientShell := zmq4.NewDealer(ctx)
 	if err := clientShell.Dial(shellAddr); err != nil {
 		t.Fatalf("Failed to connect Shell client: %v", err)
 	}
-	defer clientShell.Close()
+	t.Cleanup(func() { clientShell.Close() })
 
-	key := []byte(conn.Key)
+	// A second fake client subscribed to IOPub, the channel that carries stream/error/
+	// execute_result content -- the shell reply alone only carries the execute_reply status.
+	iopubSub := zmq4.NewSub(ctx)
+	if err := iopubSub.Dial(iopubAddr); err != nil {
+		t.Fatalf("Failed to connect IOPub subscriber: %v", err)
+	}
+	if err := iopubSub.SetOption(zmq4.OptionSubscribe, ""); err != nil {
+		t.Fatalf("Failed to subscribe to IOPub: %v", err)
+	}
+	t.Cleanup(func() { iopubSub.Close() })
+
+	// Give the listeners and the subscription time to establish before anything is sent --
+	// a PUB socket drops messages published before a SUB has finished subscribing.
+	time.Sleep(200 * time.Millisecond)
+
+	return &zmqTestKernel{clientShell: clientShell, iopubSub: iopubSub, key: []byte(conn.Key)}
+}
+
+// execute sends an execute_request and returns the decoded execute_reply.
+func (k *zmqTestKernel) execute(t *testing.T, code string) *jupyter.Message {
+	t.Helper()
+
+	execReqContent, _ := json.Marshal(map[string]string{"code": code})
+	req := &jupyter.Message{
+		Identities:   [][]byte{[]byte("client-dealer")},
+		Header:       jupyter.NewHeader("execute_request", "session-1"),
+		ParentHeader: jupyter.Header{},
+		Metadata:     make(map[string]any),
+		Content:      execReqContent,
+	}
+
+	zmsg, _ := jupyter.EncodeMessage(req, k.key)
+	if err := k.clientShell.Send(zmsg); err != nil {
+		t.Fatalf("Failed to send execute_request: %v", err)
+	}
+
+	replyZMsg, err := k.clientShell.Recv()
+	if err != nil {
+		t.Fatalf("Failed to receive execute_reply: %v", err)
+	}
+	replyMsg, err := jupyter.DecodeMessage(replyZMsg, k.key)
+	if err != nil {
+		t.Fatalf("Failed to decode execute_reply: %v", err)
+	}
+	return replyMsg
+}
+
+// recvIOPubUntil reads IOPub messages (with a short per-message timeout) until one matches
+// msgType, and fails the test if none arrives within the overall deadline.
+func (k *zmqTestKernel) recvIOPubUntil(t *testing.T, msgType string) *jupyter.Message {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		zmsg, err := k.iopubSub.Recv()
+		if err != nil {
+			t.Fatalf("IOPub Recv failed: %v", err)
+		}
+		msg, err := jupyter.DecodeMessage(zmsg, k.key)
+		if err != nil {
+			t.Fatalf("Failed to decode IOPub message: %v", err)
+		}
+		if msg.Header.MsgType == msgType {
+			return msg
+		}
+	}
+	t.Fatalf("Timed out waiting for an IOPub message of type %q", msgType)
+	return nil
+}
+
+func TestJupyterZMQIntegration(t *testing.T) {
+	k := newZMQTestKernel(t)
+	clientShell := k.clientShell
+	key := k.key
 
 	// --- Step 1: kernel_info_request ---
 	reqKernelInfo := &jupyter.Message{
@@ -214,5 +288,67 @@ func TestJupyterZMQIntegration(t *testing.T) {
 	_ = json.Unmarshal(replyExecMsg2.Content, &statusReply2)
 	if statusReply2.Status != "ok" {
 		t.Fatalf("Expected execution 2 status 'ok', got 'error'. Traceback: %v", statusReply2.Traceback)
+	}
+}
+
+// TestJupyterZMQPublishesStreamMessages verifies that a cell writing to stdout gets that
+// output published on IOPub as a "stream" message with the correct name and text -- not just
+// that the execute_reply itself reports status "ok". TestJupyterZMQIntegration never inspects
+// IOPub content at all, so this is a layer the existing suite left uncovered.
+func TestJupyterZMQPublishesStreamMessages(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	reply := k.execute(t, `import "fmt"; fmt.Println("hello from stdout")`)
+	var status struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(reply.Content, &status)
+	if status.Status != "ok" {
+		t.Fatalf("Expected execute_reply status 'ok', got %q", status.Status)
+	}
+
+	streamMsg := k.recvIOPubUntil(t, "stream")
+	var stream struct {
+		Name string `json:"name"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(streamMsg.Content, &stream); err != nil {
+		t.Fatalf("Failed to decode stream content: %v", err)
+	}
+	if stream.Name != "stdout" {
+		t.Fatalf("Expected stream name 'stdout', got %q", stream.Name)
+	}
+	if stream.Text != "hello from stdout\n" {
+		t.Fatalf("Expected stream text 'hello from stdout\\n', got %q", stream.Text)
+	}
+}
+
+// TestJupyterZMQPublishesErrorOnPanic verifies that a panicking cell publishes an "error"
+// message on IOPub (with ename/evalue), in addition to the execute_reply reporting status
+// "error" -- a Jupyter client (JupyterLab, VS Code) renders the cell's error output from this
+// IOPub message, not from the execute_reply, so an execute_reply-only check can't catch a
+// regression here.
+func TestJupyterZMQPublishesErrorOnPanic(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	reply := k.execute(t, `panic("boom")`)
+	var status struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(reply.Content, &status)
+	if status.Status != "error" {
+		t.Fatalf("Expected execute_reply status 'error', got %q", status.Status)
+	}
+
+	errMsg := k.recvIOPubUntil(t, "error")
+	var errContent struct {
+		Ename  string `json:"ename"`
+		Evalue string `json:"evalue"`
+	}
+	if err := json.Unmarshal(errMsg.Content, &errContent); err != nil {
+		t.Fatalf("Failed to decode error content: %v", err)
+	}
+	if errContent.Ename == "" {
+		t.Fatalf("Expected a non-empty ename on the published error message")
 	}
 }
