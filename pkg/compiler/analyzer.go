@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"golang.org/x/tools/go/ast/astutil"
+
 	"gocell/pkg/runtime"
 )
 
@@ -180,6 +182,43 @@ func analyzeWithTypeChecker(
 	}
 
 	return res, nil
+}
+
+// rewriteUsedSymbolAccess rewrites every occurrence of a used symbol `x` within stmts to
+// `(*x_ptr)`, the read/write target once GeneratePluginCode declares `x_ptr := (*T)(ctx.GetPointer("x"))`
+// instead of hydrating a local copy. It reuses the exact same info.Uses/candidateObjs matching
+// the UsedSymbols-detection loop above already relies on, so shadowing, field selectors
+// (`foo.Bar` -- `Bar` is never in info.Uses pointing at a candidate), and struct-literal keys
+// are excluded by construction, with no special-casing: an identifier is only rewritten when
+// go/types itself resolved it to the exact candidate object. go/printer's own precedence-aware
+// parenthesization handles every syntactic context (selector, call, address-of, deref)
+// automatically once the rewritten tree is printed -- `&x` becomes `&(*x_ptr)`, `x.Field`
+// becomes `(*x_ptr).Field`, and so on, with no per-context logic needed here.
+//
+// Not yet called from analyzeWithTypeChecker (infrastructure only at this point) -- wiring it
+// in requires GeneratePluginCode to also stop hydrating a copy and start declaring `x_ptr`,
+// which is a later, single atomic change (both sides of the contract have to move together).
+func rewriteUsedSymbolAccess(stmts []ast.Stmt, info *types.Info, candidateObjs map[types.Object]string) {
+	pre := func(c *astutil.Cursor) bool {
+		ident, ok := c.Node().(*ast.Ident)
+		if !ok {
+			return true
+		}
+		obj := info.Uses[ident]
+		if obj == nil {
+			return true // a Defs entry (declares something new), a struct-literal field key,
+			// or resolves to something else entirely -- none of these are the candidate itself.
+		}
+		name, isCandidate := candidateObjs[obj]
+		if !isCandidate {
+			return true // not a Registry symbol (e.g. a shadow -- a different object)
+		}
+		c.Replace(&ast.StarExpr{X: ast.NewIdent(name + "_ptr")})
+		return false
+	}
+	for i, stmt := range stmts {
+		stmts[i] = astutil.Apply(stmt, pre, nil).(ast.Stmt)
+	}
 }
 
 // buildAnalysisFile constructs the throwaway function go/types type-checks: the session's
