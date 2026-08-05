@@ -22,12 +22,12 @@ type Builder struct {
 	goVersion  string
 }
 
-// ModuleRoot returns the root directory of the host gosk module used to build cells.
+// ModuleRoot returns the root directory of the host gocell module used to build cells.
 func (b *Builder) ModuleRoot() string {
 	return b.moduleRoot
 }
 
-func isGoskModule(dir string) bool {
+func isGocellModule(dir string) bool {
 	if dir == "" {
 		return false
 	}
@@ -35,10 +35,10 @@ func isGoskModule(dir string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(content), "module gosk")
+	return strings.Contains(string(content), "module gocell")
 }
 
-// NewBuilder creates a new Builder by discovering the host gosk module.
+// NewBuilder creates a new Builder by discovering the host gocell module.
 func NewBuilder(moduleRoot string) (*Builder, error) {
 	root, err := discoverModuleRoot(moduleRoot)
 	if err != nil {
@@ -51,24 +51,24 @@ func NewBuilder(moduleRoot string) (*Builder, error) {
 	}, nil
 }
 
-// discoverModuleRoot locates the root directory of the host "gosk" module, in order:
-// the explicitly provided path, the GOSK_MODULE_ROOT environment variable (set by the
+// discoverModuleRoot locates the root directory of the host "gocell" module, in order:
+// the explicitly provided path, the GOCELL_MODULE_ROOT environment variable (set by the
 // installed kernelspec, see pkg/installer), the current module per `go env GOMOD`, then
 // walking up from the working directory. Unlike a hardcoded fallback path, an explicit
 // error is returned if none of these strategies succeed.
 func discoverModuleRoot(moduleRoot string) (string, error) {
-	if moduleRoot != "" && isGoskModule(moduleRoot) {
+	if moduleRoot != "" && isGocellModule(moduleRoot) {
 		return moduleRoot, nil
 	}
 
-	if envRoot := os.Getenv("GOSK_MODULE_ROOT"); envRoot != "" && isGoskModule(envRoot) {
+	if envRoot := os.Getenv("GOCELL_MODULE_ROOT"); envRoot != "" && isGocellModule(envRoot) {
 		return envRoot, nil
 	}
 
 	if out, err := exec.Command("go", "env", "GOMOD").Output(); err == nil {
 		modFile := strings.TrimSpace(string(out))
 		if modFile != "" && modFile != os.DevNull {
-			if dir := filepath.Dir(modFile); isGoskModule(dir) {
+			if dir := filepath.Dir(modFile); isGocellModule(dir) {
 				return dir, nil
 			}
 		}
@@ -77,7 +77,7 @@ func discoverModuleRoot(moduleRoot string) (string, error) {
 	if cwd, err := os.Getwd(); err == nil {
 		dir := cwd
 		for {
-			if isGoskModule(dir) {
+			if isGocellModule(dir) {
 				return dir, nil
 			}
 			parent := filepath.Dir(dir)
@@ -89,8 +89,8 @@ func discoverModuleRoot(moduleRoot string) (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"gosk module not found: neither the provided path, $GOSK_MODULE_ROOT, `go env GOMOD`, " +
-			"nor the current directory or its parents contain a gosk module go.mod",
+		"gocell module not found: neither the provided path, $GOCELL_MODULE_ROOT, `go env GOMOD`, " +
+			"nor the current directory or its parents contain a gocell module go.mod",
 	)
 }
 
@@ -119,8 +119,8 @@ func (b *Builder) BuildPlugin(cellDir string, sourceCode string) (string, error)
 
 go %s
 
-require gosk v0.0.0
-replace gosk => %q
+require gocell v0.0.0
+replace gocell => %q
 `, b.goVersion, cleanRoot)
 
 	goModPath := filepath.Join(cellDir, "go.mod")

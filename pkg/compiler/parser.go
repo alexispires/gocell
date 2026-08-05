@@ -114,11 +114,11 @@ func ParseCell(code string) (*CellContent, error) {
 
 	// 4. Extract statements
 	if len(stmtLines) > 0 {
-		stmtSrc := "package main\n\nfunc __gosk_wrapper() {\n" + strings.Join(stmtLines, "\n") + "\n}"
+		stmtSrc := "package main\n\nfunc __gocell_wrapper() {\n" + strings.Join(stmtLines, "\n") + "\n}"
 		fsetStmt := token.NewFileSet()
 		if stmtNode, errStmt := parser.ParseFile(fsetStmt, "stmt.go", stmtSrc, parser.ParseComments); errStmt == nil {
 			for _, decl := range stmtNode.Decls {
-				if f, ok := decl.(*ast.FuncDecl); ok && f.Name.Name == "__gosk_wrapper" {
+				if f, ok := decl.(*ast.FuncDecl); ok && f.Name.Name == "__gocell_wrapper" {
 					if f.Body != nil {
 						res.Stmts = append(res.Stmts, f.Body.List...)
 					}

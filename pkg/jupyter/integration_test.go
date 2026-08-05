@@ -12,8 +12,8 @@ import (
 
 	"github.com/go-zeromq/zmq4"
 
-	"gosk/pkg/jupyter"
-	"gosk/pkg/workspace"
+	"gocell/pkg/jupyter"
+	"gocell/pkg/workspace"
 )
 
 // helper to reserve 5 free TCP ports
@@ -73,7 +73,7 @@ func TestJupyterZMQIntegration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 1. Start the gosk Kernel server
+	// 1. Start the gocell Kernel server
 	iopubAddr := fmt.Sprintf("%s://%s:%d", conn.Transport, conn.IP, conn.IOPubPort)
 	iopubSocket := zmq4.NewPub(ctx)
 	if err := iopubSocket.Listen(iopubAddr); err != nil {
@@ -145,8 +145,8 @@ func TestJupyterZMQIntegration(t *testing.T) {
 		Implementation string `json:"implementation"`
 	}
 	_ = json.Unmarshal(replyMsg.Content, &infoContent)
-	if infoContent.Implementation != "gosk" {
-		t.Fatalf("Expected implementation 'gosk', got '%s'", infoContent.Implementation)
+	if infoContent.Implementation != "gocell" {
+		t.Fatalf("Expected implementation 'gocell', got '%s'", infoContent.Implementation)
 	}
 
 	// --- Step 2: execute_request (Cell 1: x := 100) ---

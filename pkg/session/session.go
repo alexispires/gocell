@@ -1,17 +1,17 @@
-// Package session owns the shared state of one gosk execution session (symbol registry,
+// Package session owns the shared state of one gocell execution session (symbol registry,
 // type registry, import tracker, plugin cache) and compiles/runs cells against it. Both the
-// Jupyter kernel (pkg/jupyter) and the standalone REPL (cmd/gosk-repl) drive a Session the
+// Jupyter kernel (pkg/jupyter) and the standalone REPL (cmd/gocell-repl) drive a Session the
 // same way, so the compile-cache-execute pipeline lives in exactly one place.
 package session
 
 import (
 	"fmt"
 
-	"gosk/pkg/compiler"
-	"gosk/pkg/output"
-	"gosk/pkg/plugin"
-	"gosk/pkg/runtime"
-	"gosk/pkg/workspace"
+	"gocell/pkg/compiler"
+	"gocell/pkg/output"
+	"gocell/pkg/plugin"
+	"gocell/pkg/runtime"
+	"gocell/pkg/workspace"
 )
 
 // Session holds everything needed to compile and run a sequence of cells that share state.

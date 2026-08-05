@@ -1,10 +1,10 @@
 package compiler_test
 
 import (
-	"gosk/pkg/compiler"
-	"gosk/pkg/plugin"
-	"gosk/pkg/runtime"
-	"gosk/pkg/workspace"
+	"gocell/pkg/compiler"
+	"gocell/pkg/plugin"
+	"gocell/pkg/runtime"
+	"gocell/pkg/workspace"
 	"strings"
 	"testing"
 )

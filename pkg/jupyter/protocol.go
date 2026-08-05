@@ -26,7 +26,7 @@ type Header struct {
 func NewHeader(msgType, session string) Header {
 	return Header{
 		MsgID:    fmt.Sprintf("%d", time.Now().UnixNano()),
-		Username: "gosk",
+		Username: "gocell",
 		Session:  session,
 		MsgType:  msgType,
 		Version:  "5.3",

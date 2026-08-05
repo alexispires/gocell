@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"gosk/pkg/runtime"
+	"gocell/pkg/runtime"
 )
 
 // AnalysisResult holds the results of analyzing a cell.
@@ -25,7 +25,7 @@ type AnalysisResult struct {
 // locals at the top of this function, so Go's own scoping rules -- shadowing, `:=`
 // redeclaration of an existing local, closure capture -- resolve exactly as they will in the
 // compiled plugin.
-const analysisFuncName = "__gosk_analysis"
+const analysisFuncName = "__gocell_analysis"
 
 // AnalyzeCell decides, for every symbol the cell touches, whether it refers to a variable
 // already in the Registry (to hydrate, and for value types to write back) or declares a new
@@ -97,7 +97,7 @@ func analyzeWithTypeChecker(
 	src := buildAnalysisSource(cell, candidates, existing, importTracker, typeRegistry)
 
 	fset := token.NewFileSet()
-	file, parseErr := parser.ParseFile(fset, "gosk_analysis.go", src, 0)
+	file, parseErr := parser.ParseFile(fset, "gocell_analysis.go", src, 0)
 	if parseErr != nil {
 		return nil, fmt.Errorf("could not analyze the cell: %w", parseErr)
 	}

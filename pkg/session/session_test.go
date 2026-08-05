@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"gosk/pkg/workspace"
+	"gocell/pkg/workspace"
 )
 
 // countCellDirs counts the compilation subdirectories already created in the workspace;

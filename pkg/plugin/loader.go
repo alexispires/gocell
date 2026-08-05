@@ -4,7 +4,7 @@ import (
 	"fmt"
 	pluginGo "plugin"
 
-	"gosk/pkg/runtime"
+	"gocell/pkg/runtime"
 )
 
 // ExecutorFunc is the signature of the Execute function generated in each cell plugin.

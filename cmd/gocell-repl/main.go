@@ -1,4 +1,4 @@
-// Command gosk-repl is a standalone, Jupyter-free interactive shell for gosk: it drives the
+// Command gocell-repl is a standalone, Jupyter-free interactive shell for gocell: it drives the
 // same pkg/session used by the Jupyter kernel, reading cells from stdin instead of ZMQ
 // messages. A cell is submitted once its braces balance out, so multi-line func/type/if/for
 // blocks can be typed naturally; single-line cells run as soon as you press Enter.
@@ -10,8 +10,8 @@ import (
 	"os"
 	"strings"
 
-	"gosk/pkg/session"
-	"gosk/pkg/workspace"
+	"gocell/pkg/session"
+	"gocell/pkg/workspace"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("gosk - standalone Go REPL (Ctrl+D to exit)")
+	fmt.Println("gocell - standalone Go REPL (Ctrl+D to exit)")
 
 	var buf strings.Builder
 	braceDepth := 0
@@ -37,7 +37,7 @@ func main() {
 		if braceDepth > 0 {
 			fmt.Print("...> ")
 		} else {
-			fmt.Print("gosk> ")
+			fmt.Print("gocell> ")
 		}
 	}
 

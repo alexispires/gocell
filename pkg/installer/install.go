@@ -18,20 +18,20 @@ type KernelSpec struct {
 
 // InstallKernelSpec installs the kernel.json file in the appropriate Jupyter directory.
 func InstallKernelSpec() (string, error) {
-	// 1. Get the absolute path of the gosk-kernel binary
-	kernelBinary, err := exec.LookPath("gosk-kernel")
+	// 1. Get the absolute path of the gocell-kernel binary
+	kernelBinary, err := exec.LookPath("gocell-kernel")
 	if err != nil {
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
 			home, _ := os.UserHomeDir()
 			gopath = filepath.Join(home, "go")
 		}
-		binPath := filepath.Join(gopath, "bin", "gosk-kernel")
+		binPath := filepath.Join(gopath, "bin", "gocell-kernel")
 		if _, errStat := os.Stat(binPath); errStat == nil {
 			kernelBinary = binPath
 		} else {
 			cwd, _ := os.Getwd()
-			kernelBinary = filepath.Join(cwd, "gosk-kernel")
+			kernelBinary = filepath.Join(cwd, "gocell-kernel")
 		}
 	}
 
@@ -40,7 +40,7 @@ func InstallKernelSpec() (string, error) {
 		absBinaryPath = kernelBinary
 	}
 
-	// 2. Determine the gosk module's root directory
+	// 2. Determine the gocell module's root directory
 	cwd, _ := os.Getwd()
 	modRoot := cwd
 	dir := cwd
@@ -64,22 +64,22 @@ func InstallKernelSpec() (string, error) {
 
 	var jupyterKernelDir string
 	if runtime.GOOS == "darwin" {
-		jupyterKernelDir = filepath.Join(homeDir, "Library", "Jupyter", "kernels", "gosk")
+		jupyterKernelDir = filepath.Join(homeDir, "Library", "Jupyter", "kernels", "gocell")
 	} else {
-		jupyterKernelDir = filepath.Join(homeDir, ".local", "share", "jupyter", "kernels", "gosk")
+		jupyterKernelDir = filepath.Join(homeDir, ".local", "share", "jupyter", "kernels", "gocell")
 	}
 
 	if err := os.MkdirAll(jupyterKernelDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create kernelspec directory %s: %w", jupyterKernelDir, err)
 	}
 
-	// 4. Write kernel.json with the GOSK_MODULE_ROOT environment variable
+	// 4. Write kernel.json with the GOCELL_MODULE_ROOT environment variable
 	spec := KernelSpec{
 		Argv:        []string{absBinaryPath, "{connection_file}"},
-		DisplayName: "Go (gosk)",
+		DisplayName: "Go (gocell)",
 		Language:    "go",
 		Env: map[string]string{
-			"GOSK_MODULE_ROOT": modRoot,
+			"GOCELL_MODULE_ROOT": modRoot,
 		},
 	}
 

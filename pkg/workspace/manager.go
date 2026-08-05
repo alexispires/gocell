@@ -17,7 +17,7 @@ type Manager struct {
 // NewManager creates a workspace manager in the specified directory.
 func NewManager(baseDir string) (*Manager, error) {
 	if baseDir == "" {
-		tmpDir, err := os.MkdirTemp("", "gosk-workspace-*")
+		tmpDir, err := os.MkdirTemp("", "gocell-workspace-*")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temporary directory: %w", err)
 		}

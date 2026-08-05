@@ -2,7 +2,7 @@ package output_test
 
 import (
 	"fmt"
-	"gosk/pkg/output"
+	"gocell/pkg/output"
 	"os"
 	"testing"
 )

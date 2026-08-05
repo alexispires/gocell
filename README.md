@@ -1,4 +1,4 @@
-# gosk
+# gocell
 
 A Jupyter kernel for Go that runs every cell as a real compiled Go plugin
 (`-buildmode=plugin`), dynamically loaded into the kernel's process. A session's state
@@ -34,7 +34,7 @@ LoadAndExecute    (pkg/plugin/loader.go)        plugin.Open + call Execute(ctx),
 
 `pkg/session` has no dependency on Jupyter or ZMQ, so it's driven identically by two
 front-ends: the Jupyter kernel ([pkg/jupyter](pkg/jupyter)) and the standalone REPL
-([cmd/gosk-repl](cmd/gosk-repl)).
+([cmd/gocell-repl](cmd/gocell-repl)).
 
 The shared state lives in a [`runtime.Registry`](pkg/runtime/registry.go): every top-level
 variable from a cell is stored as an `unsafe.Pointer` plus a `KeepAlive` reference (to
@@ -64,20 +64,20 @@ compiled afterward, which allows using (and redefining) them in subsequent cells
 ## Installation
 
 ```sh
-go build -o gosk-kernel ./cmd/gosk-kernel
-go build -o gosk-install ./cmd/gosk-install
-./gosk-install
+go build -o gocell-kernel ./cmd/gocell-kernel
+go build -o gocell-install ./cmd/gocell-install
+./gocell-install
 ```
 
-`gosk-install` writes a `kernel.json` into Jupyter's kernels directory, with the
-`GOSK_MODULE_ROOT` environment variable pointing at this repository — that's what lets the
-kernel find the `gosk` module (and its Go version) no matter how Jupyter launches it.
+`gocell-install` writes a `kernel.json` into Jupyter's kernels directory, with the
+`GOCELL_MODULE_ROOT` environment variable pointing at this repository — that's what lets the
+kernel find the `gocell` module (and its Go version) no matter how Jupyter launches it.
 
 For a REPL with no Jupyter involved at all:
 
 ```sh
-go build -o gosk-repl ./cmd/gosk-repl
-./gosk-repl
+go build -o gocell-repl ./cmd/gocell-repl
+./gocell-repl
 ```
 
 Cells are submitted as soon as braces balance out, so multi-line `func`/`type`/`if`/`for`

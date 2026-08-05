@@ -81,13 +81,13 @@ func (it *ImportTracker) GenerateImportBlockForCode(codeBody string) string {
 	sb.WriteString("\t\"reflect\"\n")
 	sb.WriteString("\t\"strings\"\n")
 	sb.WriteString("\t\"unsafe\"\n")
-	sb.WriteString("\t\"gosk/pkg/runtime\"\n")
+	sb.WriteString("\t\"gocell/pkg/runtime\"\n")
 
 	for _, p := range paths {
 		spec := it.imports[p]
 		cleanPath := strings.Trim(spec.Path, `"`)
 
-		if cleanPath == "gosk/pkg/runtime" || cleanPath == "unsafe" || cleanPath == "fmt" || cleanPath == "strings" || cleanPath == "reflect" {
+		if cleanPath == "gocell/pkg/runtime" || cleanPath == "unsafe" || cleanPath == "fmt" || cleanPath == "strings" || cleanPath == "reflect" {
 			continue
 		}
 

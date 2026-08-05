@@ -1,4 +1,4 @@
-module gosk
+module gocell
 
 go 1.25.0
 

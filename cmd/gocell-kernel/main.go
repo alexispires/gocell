@@ -10,13 +10,13 @@ import (
 
 	"github.com/go-zeromq/zmq4"
 
-	"gosk/pkg/jupyter"
-	"gosk/pkg/workspace"
+	"gocell/pkg/jupyter"
+	"gocell/pkg/workspace"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: gosk-kernel <connection_file>")
+		fmt.Println("Usage: gocell-kernel <connection_file>")
 		os.Exit(1)
 	}
 
@@ -66,10 +66,10 @@ func main() {
 	// 4. Start Shell Loop
 	server, err := jupyter.NewServer(conn, wsMgr)
 	if err != nil {
-		log.Fatalf("Failed to initialize gosk server: %v", err)
+		log.Fatalf("Failed to initialize gocell server: %v", err)
 	}
 
-	log.Printf("gosk Kernel started successfully. Listening on Shell channel %s:%d...", conn.IP, conn.ShellPort)
+	log.Printf("gocell Kernel started successfully. Listening on Shell channel %s:%d...", conn.IP, conn.ShellPort)
 
 	if err := server.StartShellLoop(ctx, iopub); err != nil {
 		log.Fatalf("Shell loop error: %v", err)

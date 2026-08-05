@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-zeromq/zmq4"
 
-	"gosk/pkg/session"
-	"gosk/pkg/workspace"
+	"gocell/pkg/session"
+	"gocell/pkg/workspace"
 )
 
 // Server manages the main Jupyter kernel server.
@@ -20,7 +20,7 @@ type Server struct {
 	executionCount uint64
 }
 
-// NewServer creates a new gosk server.
+// NewServer creates a new gocell server.
 func NewServer(conn *ConnectionInfo, wsMgr *workspace.Manager) (*Server, error) {
 	sess, err := session.New(wsMgr)
 	if err != nil {
@@ -89,7 +89,7 @@ func (s *Server) StartShellLoop(ctx context.Context, iopub *IOPubNotifier) error
 func (s *Server) handleKernelInfoRequest(socket zmq4.Socket, msg *Message, key []byte) {
 	content, _ := json.Marshal(map[string]any{
 		"protocol_version":       "5.3",
-		"implementation":         "gosk",
+		"implementation":         "gocell",
 		"implementation_version": "0.1.0",
 		"language_info": map[string]any{
 			"name":           "go",
@@ -97,7 +97,7 @@ func (s *Server) handleKernelInfoRequest(socket zmq4.Socket, msg *Message, key [
 			"mimetype":       "text/x-gosrc",
 			"file_extension": ".go",
 		},
-		"banner": "gosk - Dynamic Go Jupyter Kernel (Plugins & Shared Pointers)",
+		"banner": "gocell - Dynamic Go Jupyter Kernel (Plugins & Shared Pointers)",
 	})
 
 	replyMsg := &Message{

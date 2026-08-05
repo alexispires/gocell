@@ -81,14 +81,14 @@ func TestSessionClosures(t *testing.T) {
 func TestSessionChannels(t *testing.T) {
 	cells := []string{
 		`ch := make(chan string, 1)`,
-		`ch <- "hello gosk"`,
+		`ch <- "hello gocell"`,
 		`msg := <-ch`,
 	}
 	ctx := runNotebookSession(t, cells)
 
 	ptrMsg := ctx.GetPointer("msg")
-	if ptrMsg == nil || *(*string)(ptrMsg) != "hello gosk" {
-		t.Fatalf("Expected value 'hello gosk'")
+	if ptrMsg == nil || *(*string)(ptrMsg) != "hello gocell" {
+		t.Fatalf("Expected value 'hello gocell'")
 	}
 }
 
