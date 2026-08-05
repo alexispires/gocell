@@ -39,10 +39,12 @@ front-ends: the Jupyter kernel ([pkg/jupyter](pkg/jupyter)) and the standalone R
 ([cmd/gocell-repl](cmd/gocell-repl)).
 
 The shared state lives in a [`runtime.Registry`](pkg/runtime/registry.go): every top-level
-variable from a cell is stored as an `unsafe.Pointer` plus a `KeepAlive` reference (to
-prevent the GC from freeing it). Subsequent cells that reference that variable re-declare a
-local variable of the same Go type and hydrate it from that pointer at the start of their
-`Execute()`, then write the modified value back at the end.
+variable from a cell is stored as an `unsafe.Pointer` to that variable's own memory, plus a
+`KeepAlive` reference (to prevent the GC from freeing it). Subsequent cells that reference that
+variable don't hydrate a local copy: `AnalyzeCell` rewrites every occurrence of it to go
+through that pointer directly (`x` becomes `(*x_ptr)`), so every read and write in the cell
+touches the same shared memory a closure or another cell would see — there is no copy to fall
+out of sync.
 
 Types and functions declared in a cell are kept as source text in a
 [`runtime.TypeRegistry`](pkg/runtime/types.go) and re-injected in full into every plugin
@@ -104,9 +106,3 @@ blocks can be typed naturally; a single-line cell runs as soon as you press Ente
   cell plugin to be built with a strictly compatible Go toolchain (hence the automatic
   syncing of the cell go.mod's `go` directive with the host module's, see
   [pkg/compiler/builder.go](pkg/compiler/builder.go)).
-- **A cell that only ever writes to a pointer-typed symbol loses that write.** Pointer-typed
-  symbols are hydrated but never written back, so reassigning one (`foo = &Foo{...}`) does
-  not persist to the next cell, and a cell whose sole use of it is that assignment fails to
-  compile ("declared and not used", since Go counts only reads as uses). Mutating *through*
-  a pointer (`foo.N = 42`) works normally. The same gap makes a closure that captures a
-  value-typed symbol in one cell lose its mutations when called from another.
