@@ -40,7 +40,10 @@ func TestDisplayLastExpression(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to parse: %v\nCode: %s", err, code)
 		}
-		analysis := compiler.AnalyzeCell(parsed, reg, importTracker, tr)
+		analysis, err := compiler.AnalyzeCell(parsed, reg, importTracker, tr)
+		if err != nil {
+			t.Fatalf("Failed to analyze: %v", err)
+		}
 		generated := compiler.GeneratePluginCode(parsed, analysis, importTracker, tr)
 		soPath, err := builder.BuildPlugin(cellDir, generated)
 		if err != nil {

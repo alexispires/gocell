@@ -23,7 +23,11 @@ func analyzeCell(t *testing.T, code string, seed map[string]string) *compiler.An
 	if err != nil {
 		t.Fatalf("Failed to parse: %v", err)
 	}
-	return compiler.AnalyzeCell(cell, reg, compiler.NewImportTracker(), runtime.NewTypeRegistry())
+	res, err := compiler.AnalyzeCell(cell, reg, compiler.NewImportTracker(), runtime.NewTypeRegistry())
+	if err != nil {
+		t.Fatalf("Failed to analyze: %v", err)
+	}
+	return res
 }
 
 // A top-level `const` is not a variable: its address cannot be taken, so exporting it to the

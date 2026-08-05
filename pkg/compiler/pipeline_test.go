@@ -40,7 +40,10 @@ func runNotebookSession(t *testing.T, cells []string) *runtime.Context {
 			t.Fatalf("Failed to parse cell %d: %v\nCode: %s", i+1, err, code)
 		}
 
-		analysis := compiler.AnalyzeCell(parsed, reg, importTracker, tr)
+		analysis, err := compiler.AnalyzeCell(parsed, reg, importTracker, tr)
+		if err != nil {
+			t.Fatalf("Failed to analyze: %v", err)
+		}
 		generatedCode := compiler.GeneratePluginCode(parsed, analysis, importTracker, tr)
 
 		soPath, err := builder.BuildPlugin(cellDir, generatedCode)

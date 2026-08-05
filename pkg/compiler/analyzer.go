@@ -39,16 +39,16 @@ const analysisFuncName = "__gosk_analysis"
 // literal's field key, a label), and hydrating a symbol that the generated code never really
 // references fails to compile ("declared and not used") for pointer-typed symbols, which
 // have no write-back to otherwise reference them.
-func AnalyzeCell(cell *CellContent, reg *runtime.Registry, importTracker *ImportTracker, typeRegistry *runtime.TypeRegistry) *AnalysisResult {
+// It returns an error only if the cell could not be analyzed at all, which leaves no honest
+// answer to give: guessing by name would resurrect exactly the ambiguity described above, and
+// an empty analysis would silently drop the session's state from the generated code.
+func AnalyzeCell(cell *CellContent, reg *runtime.Registry, importTracker *ImportTracker, typeRegistry *runtime.TypeRegistry) (*AnalysisResult, error) {
 	existing := reg.AllSymbols()
 
 	// Must run before type-checking: it changes how the cell's own statements resolve.
 	rewriteTopLevelRedefinitions(cell, existing)
 
-	if res, ok := analyzeWithTypeChecker(cell, existing, importTracker, typeRegistry); ok {
-		return res
-	}
-	return analyzeByName(cell, existing)
+	return analyzeWithTypeChecker(cell, existing, importTracker, typeRegistry)
 }
 
 // rewriteTopLevelRedefinitions turns a top-level `:=` into `=` when every name on its left
@@ -78,19 +78,18 @@ func rewriteTopLevelRedefinitions(cell *CellContent, existing map[string]*runtim
 }
 
 // analyzeWithTypeChecker builds and type-checks the throwaway source, then reads the answer
-// out of go/types. It reports false if that source could not even be parsed, so the caller
-// can fall back to name matching rather than return a wrong (empty) analysis.
+// out of go/types.
 func analyzeWithTypeChecker(
 	cell *CellContent,
 	existing map[string]*runtime.Symbol,
 	importTracker *ImportTracker,
 	typeRegistry *runtime.TypeRegistry,
-) (result *AnalysisResult, ok bool) {
-	// go/types is being fed synthesized source built from a partially-known state; a panic
-	// in the checker must degrade to the name-matching fallback, never take down the kernel.
+) (result *AnalysisResult, err error) {
+	// go/types is being fed source synthesized from a partially-known session state; a panic
+	// in the checker must surface as a failed cell, never take down the kernel.
 	defer func() {
 		if r := recover(); r != nil {
-			result, ok = nil, false
+			result, err = nil, fmt.Errorf("type-checking the cell panicked: %v", r)
 		}
 	}()
 
@@ -98,9 +97,9 @@ func analyzeWithTypeChecker(
 	src := buildAnalysisSource(cell, candidates, existing, importTracker, typeRegistry)
 
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "gosk_analysis.go", src, 0)
-	if err != nil {
-		return nil, false
+	file, parseErr := parser.ParseFile(fset, "gosk_analysis.go", src, 0)
+	if parseErr != nil {
+		return nil, fmt.Errorf("could not analyze the cell: %w", parseErr)
 	}
 
 	info := &types.Info{
@@ -121,14 +120,14 @@ func analyzeWithTypeChecker(
 
 	fn := findFuncDecl(file, analysisFuncName)
 	if fn == nil || fn.Body == nil || len(fn.Body.List) < len(candidates) {
-		return nil, false
+		return nil, fmt.Errorf("could not analyze the cell: %s is missing from the analyzed source", analysisFuncName)
 	}
 	// The function scope holds both the hydration candidates and the cell's own top-level
 	// declarations -- go/types gives a function body no scope of its own (Scopes[fn.Body] is
 	// nil), so Scopes[fn.Type] is what "top level of the generated Execute()" means here.
 	funcScope := info.Scopes[fn.Type]
 	if funcScope == nil {
-		return nil, false
+		return nil, fmt.Errorf("could not analyze the cell: no scope was resolved for %s", analysisFuncName)
 	}
 
 	candidateObjs := make(map[types.Object]string, len(candidates))
@@ -184,12 +183,28 @@ func analyzeWithTypeChecker(
 		})
 	}
 
-	return res, true
+	return res, nil
 }
 
 // buildAnalysisSource renders the cell as a self-contained file for type-checking: the
 // session's accumulated declarations, then the Registry symbols as locals, then the cell's
-// statements -- the same shape GeneratePluginCode will emit, minus the Registry plumbing.
+// statements.
+//
+// This is a model of the file GeneratePluginCode will emit, and only one property of that
+// file has to be modelled faithfully: every name the cell references must resolve here to
+// what it will resolve to there. That is why the Registry symbols are declared *inside* the
+// function rather than at package level -- Go's `:=` only reuses a variable declared in the
+// same block, so package-level candidates would make `x, fresh := 1, 2` shadow x here while
+// reusing it in the real Execute(), and the analysis would describe a program nobody
+// compiles.
+//
+// The two files deliberately differ everywhere else: this one has no hydration bodies, no
+// write-back, no export, and declares every Registry symbol rather than just the used ones
+// (harmless -- declaring names the cell never references cannot change how the ones it does
+// reference resolve). So this is a semantic coupling, not shared code to factor out.
+// Changing the scope structure of Execute() -- moving hydration into a nested block, wrapping
+// the cell's statements -- breaks that coupling, and shadowing_test.go is what catches it:
+// those cells only compile if both files agree on what shadows what.
 func buildAnalysisSource(
 	cell *CellContent,
 	candidates []string,
@@ -248,62 +263,6 @@ func buildAnalysisSource(
 	sb.WriteString("\n")
 	sb.WriteString(body.String())
 	return sb.String()
-}
-
-// analyzeByName is the degraded path used only when the throwaway source cannot be parsed or
-// the type-checker panics. It resolves by name alone, so it inherits the ambiguity described
-// on AnalyzeCell; it errs toward hydrating, which keeps a cell that would otherwise lose its
-// state compiling in the common case.
-func analyzeByName(cell *CellContent, existing map[string]*runtime.Symbol) *AnalysisResult {
-	res := &AnalysisResult{
-		UsedSymbols:  make(map[string]*runtime.Symbol),
-		NewVariables: make([]string, 0),
-	}
-	exported := make(map[string]bool)
-
-	declareName := func(name string) {
-		if name == "_" {
-			return
-		}
-		if sym, exists := existing[name]; exists {
-			res.UsedSymbols[name] = sym
-		} else if !exported[name] {
-			exported[name] = true
-			res.NewVariables = append(res.NewVariables, name)
-		}
-	}
-
-	for _, stmt := range cell.Stmts {
-		switch node := stmt.(type) {
-		case *ast.AssignStmt:
-			for _, lhs := range node.Lhs {
-				if ident, ok := lhs.(*ast.Ident); ok {
-					declareName(ident.Name)
-				}
-			}
-		case *ast.DeclStmt:
-			if genDecl, ok := node.Decl.(*ast.GenDecl); ok && genDecl.Tok == token.VAR {
-				for _, spec := range genDecl.Specs {
-					if valueSpec, ok := spec.(*ast.ValueSpec); ok {
-						for _, name := range valueSpec.Names {
-							declareName(name.Name)
-						}
-					}
-				}
-			}
-		}
-
-		ast.Inspect(stmt, func(n ast.Node) bool {
-			if ident, ok := n.(*ast.Ident); ok {
-				if sym, exists := existing[ident.Name]; exists {
-					res.UsedSymbols[ident.Name] = sym
-				}
-			}
-			return true
-		})
-	}
-
-	return res
 }
 
 func findFuncDecl(file *ast.File, name string) *ast.FuncDecl {

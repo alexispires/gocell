@@ -64,7 +64,10 @@ func (s *Session) Execute(code string) (Result, error) {
 		return Result{}, err
 	}
 
-	analysis := compiler.AnalyzeCell(cell, s.reg, s.importTracker, s.typeReg)
+	analysis, err := compiler.AnalyzeCell(cell, s.reg, s.importTracker, s.typeReg)
+	if err != nil {
+		return Result{}, err
+	}
 	pluginSource := compiler.GeneratePluginCode(cell, analysis, s.importTracker, s.typeReg)
 
 	// The generated source fully captures everything the compiled binary depends on, so
