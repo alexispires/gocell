@@ -1,5 +1,7 @@
 # gocell
 
+<img src="logo.png" alt="gocell logo" width="220">
+
 A Jupyter kernel for Go that runs every cell as a real compiled Go plugin
 (`-buildmode=plugin`), dynamically loaded into the kernel's process. A session's state
 (variables, channels, background goroutines, open connections...) genuinely persists in
