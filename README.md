@@ -102,7 +102,9 @@ blocks can be typed naturally; a single-line cell runs as soon as you press Ente
   cell plugin to be built with a strictly compatible Go toolchain (hence the automatic
   syncing of the cell go.mod's `go` directive with the host module's, see
   [pkg/compiler/builder.go](pkg/compiler/builder.go)).
-- **`AnalyzeCell` identifies used symbols by name, syntactically** (an AST walk), not
-  through real type resolution (`go/types`). It explicitly excludes composite literal field
-  names and method/field selectors to avoid the most common collisions with a same-named
-  global variable, but this is not as strong a guarantee as real type checking.
+- **A cell that only ever writes to a pointer-typed symbol loses that write.** Pointer-typed
+  symbols are hydrated but never written back, so reassigning one (`foo = &Foo{...}`) does
+  not persist to the next cell, and a cell whose sole use of it is that assignment fails to
+  compile ("declared and not used", since Go counts only reads as uses). Mutating *through*
+  a pointer (`foo.N = 42`) works normally. The same gap makes a closure that captures a
+  value-typed symbol in one cell lose its mutations when called from another.

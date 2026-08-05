@@ -28,7 +28,7 @@ func TestResilienceExplicitPanic(t *testing.T) {
 	// Cell 1: Initialization
 	cellDir1, _, _ := wsMgr.CreateCellDir()
 	p1, _ := compiler.ParseCell(`a := 10`)
-	an1 := compiler.AnalyzeCell(p1, reg)
+	an1 := compiler.AnalyzeCell(p1, reg, importTracker, tr)
 	g1 := compiler.GeneratePluginCode(p1, an1, importTracker, tr)
 	so1, _ := builder.BuildPlugin(cellDir1, g1)
 	if err := loader.LoadAndExecute(so1, ctx); err != nil {
@@ -38,7 +38,7 @@ func TestResilienceExplicitPanic(t *testing.T) {
 	// Cell 2: Explicit panic
 	cellDir2, _, _ := wsMgr.CreateCellDir()
 	p2, _ := compiler.ParseCell(`panic("simulated fatal error")`)
-	an2 := compiler.AnalyzeCell(p2, reg)
+	an2 := compiler.AnalyzeCell(p2, reg, importTracker, tr)
 	g2 := compiler.GeneratePluginCode(p2, an2, importTracker, tr)
 	so2, _ := builder.BuildPlugin(cellDir2, g2)
 
@@ -54,7 +54,7 @@ func TestResilienceExplicitPanic(t *testing.T) {
 	// Cell 3: Normal execution after the panic
 	cellDir3, _, _ := wsMgr.CreateCellDir()
 	p3, _ := compiler.ParseCell(`b := a + 20`)
-	an3 := compiler.AnalyzeCell(p3, reg)
+	an3 := compiler.AnalyzeCell(p3, reg, importTracker, tr)
 	g3 := compiler.GeneratePluginCode(p3, an3, importTracker, tr)
 	so3, _ := builder.BuildPlugin(cellDir3, g3)
 	if err := loader.LoadAndExecute(so3, ctx); err != nil {
@@ -86,7 +86,7 @@ func TestResilienceNilPointerPanic(t *testing.T) {
 	// Cell 1: Nil pointer dereference
 	cellDir1, _, _ := wsMgr.CreateCellDir()
 	p1, _ := compiler.ParseCell(`var ptr *int; *ptr = 100`)
-	an1 := compiler.AnalyzeCell(p1, reg)
+	an1 := compiler.AnalyzeCell(p1, reg, importTracker, tr)
 	g1 := compiler.GeneratePluginCode(p1, an1, importTracker, tr)
 	so1, _ := builder.BuildPlugin(cellDir1, g1)
 
@@ -98,7 +98,7 @@ func TestResilienceNilPointerPanic(t *testing.T) {
 	// Cell 2: Normal execution after the panic
 	cellDir2, _, _ := wsMgr.CreateCellDir()
 	p2, _ := compiler.ParseCell(`recoveredVar := 99`)
-	an2 := compiler.AnalyzeCell(p2, reg)
+	an2 := compiler.AnalyzeCell(p2, reg, importTracker, tr)
 	g2 := compiler.GeneratePluginCode(p2, an2, importTracker, tr)
 	so2, _ := builder.BuildPlugin(cellDir2, g2)
 	if err := loader.LoadAndExecute(so2, ctx); err != nil {

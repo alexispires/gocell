@@ -49,32 +49,8 @@ func GeneratePluginCode(
 
 	// 1. Register type and function definitions
 	fset := token.NewFileSet()
-	for _, typeDecl := range cell.TypeDecls {
-		var buf strings.Builder
-		if err := printer.Fprint(&buf, fset, typeDecl); err == nil {
-			if genDecl, ok := typeDecl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
-				for _, spec := range genDecl.Specs {
-					if typeSpec, okSpec := spec.(*ast.TypeSpec); okSpec {
-						typeRegistry.RegisterType("type_"+typeSpec.Name.Name, buf.String())
-					}
-				}
-			}
-		}
-	}
-
-	for _, funcDecl := range cell.FuncDecls {
-		var buf strings.Builder
-		if err := printer.Fprint(&buf, fset, funcDecl); err == nil {
-			if fDecl, ok := funcDecl.(*ast.FuncDecl); ok {
-				name := fDecl.Name.Name
-				if fDecl.Recv != nil && len(fDecl.Recv.List) > 0 {
-					var recvBuf strings.Builder
-					_ = printer.Fprint(&recvBuf, fset, fDecl.Recv.List[0].Type)
-					name = fmt.Sprintf("method_%s_%s", recvBuf.String(), fDecl.Name.Name)
-				}
-				typeRegistry.RegisterType("func_"+name, buf.String())
-			}
-		}
+	for _, decl := range cellDeclarations(cell) {
+		typeRegistry.RegisterType(decl.key, decl.code)
 	}
 
 	var bodySb strings.Builder
@@ -95,12 +71,7 @@ func GeneratePluginCode(
 	if len(analysis.UsedSymbols) > 0 {
 		bodySb.WriteString("\t// Hydrate existing symbols\n")
 		for name, sym := range analysis.UsedSymbols {
-			typeName := sym.TypeName
-			if typeName == "" {
-				typeName = "any"
-			}
-			cleanTypeName := strings.ReplaceAll(typeName, "*main.", "*")
-			cleanTypeName = strings.ReplaceAll(cleanTypeName, "main.", "")
+			cleanTypeName := registrySymbolType(sym)
 
 			if strings.HasPrefix(cleanTypeName, "*") {
 				bodySb.WriteString(fmt.Sprintf("\tvar %s %s\n", name, cleanTypeName))
@@ -148,12 +119,7 @@ func GeneratePluginCode(
 	if len(analysis.UsedSymbols) > 0 {
 		bodySb.WriteString("\n\t// Write modified symbols back to the Registry heap\n")
 		for name, sym := range analysis.UsedSymbols {
-			typeName := sym.TypeName
-			if typeName == "" {
-				typeName = "any"
-			}
-			cleanTypeName := strings.ReplaceAll(typeName, "*main.", "*")
-			cleanTypeName = strings.ReplaceAll(cleanTypeName, "main.", "")
+			cleanTypeName := registrySymbolType(sym)
 
 			if !strings.HasPrefix(cleanTypeName, "*") {
 				bodySb.WriteString(fmt.Sprintf("\tif ptr := ctx.GetPointer(%q); ptr != nil {\n", name))
@@ -195,4 +161,68 @@ func GeneratePluginCode(
 	sb.WriteString(bodyCodeStr)
 
 	return sb.String()
+}
+
+// cellDecl is one type/function/method declaration from a cell, under the key it is
+// registered as in the session's TypeRegistry (so redefining a name in a later cell replaces
+// the earlier one rather than colliding with it).
+type cellDecl struct {
+	key  string
+	code string
+}
+
+// cellDeclarations renders a cell's type and function declarations to source. Both the
+// generator (which registers them for re-injection into every later cell) and the analyzer
+// (which needs them for type-checking) go through this, so the two always agree on what a
+// cell declares and under which key.
+func cellDeclarations(cell *CellContent) []cellDecl {
+	var decls []cellDecl
+	fset := token.NewFileSet()
+
+	for _, typeDecl := range cell.TypeDecls {
+		var buf strings.Builder
+		if err := printer.Fprint(&buf, fset, typeDecl); err != nil {
+			continue
+		}
+		if genDecl, ok := typeDecl.(*ast.GenDecl); ok && genDecl.Tok == token.TYPE {
+			for _, spec := range genDecl.Specs {
+				if typeSpec, okSpec := spec.(*ast.TypeSpec); okSpec {
+					decls = append(decls, cellDecl{key: "type_" + typeSpec.Name.Name, code: buf.String()})
+				}
+			}
+		}
+	}
+
+	for _, funcDecl := range cell.FuncDecls {
+		var buf strings.Builder
+		if err := printer.Fprint(&buf, fset, funcDecl); err != nil {
+			continue
+		}
+		fDecl, ok := funcDecl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		name := fDecl.Name.Name
+		if fDecl.Recv != nil && len(fDecl.Recv.List) > 0 {
+			var recvBuf strings.Builder
+			_ = printer.Fprint(&recvBuf, fset, fDecl.Recv.List[0].Type)
+			name = fmt.Sprintf("method_%s_%s", recvBuf.String(), fDecl.Name.Name)
+		}
+		decls = append(decls, cellDecl{key: "func_" + name, code: buf.String()})
+	}
+
+	return decls
+}
+
+// registrySymbolType renders a Registry symbol's Go type as it should appear in generated
+// source. The stored name comes from a plugin's %T, which qualifies cell-declared types with
+// the plugin's own "main" package -- a qualifier that means nothing in the next cell, which
+// re-declares those types itself.
+func registrySymbolType(sym *runtime.Symbol) string {
+	typeName := sym.TypeName
+	if typeName == "" {
+		return "any"
+	}
+	typeName = strings.ReplaceAll(typeName, "*main.", "*")
+	return strings.ReplaceAll(typeName, "main.", "")
 }
