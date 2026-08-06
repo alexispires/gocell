@@ -50,14 +50,38 @@ Types and functions declared in a cell are kept as source in a
 
 ## Notable features
 
-- **Idempotent re-execution** — `:=` becomes `=` when every left-hand name already exists,
-  so re-running a cell doesn't hit Go's "no new variables" error.
+- **Goroutines that outlive a cell** — a `go func() { ... }()` started in one cell keeps
+  running in the background, fed from and read from independent later cells
+  ([examples/live-goroutines.ipynb](examples/live-goroutines.ipynb)).
+- **State persists with zero effort** — no serialization, no `%store`-style magic: a
+  variable's memory address is identical from cell to cell, because cells share the kernel
+  process's own heap ([examples/heavy-model.ipynb](examples/heavy-model.ipynb)).
+- **Real generics** — type parameters work both within a cell and across cells, the same as
+  any other type or function declaration
+  ([examples/generics.ipynb](examples/generics.ipynb)).
+- **Real compiled speed** — every cell compiles to native code via `-buildmode=plugin`,
+  instead of being evaluated by an interpreter. Measured on an Apple M2, back to back, running
+  [examples/heavy-model.ipynb](examples/heavy-model.ipynb)'s exact workload (8M samples, 140
+  epochs of gradient descent) unmodified against
+  [gophernotes](https://github.com/gopherdata/gophernotes) (which evaluates cell code through
+  the [gomacro](https://github.com/cosmos72/gomacro) interpreter rather than compiling it):
+  gocell finished in **1.46s**, gophernotes in **80.5s** — about **55x** faster, both runs
+  converging to the same result. Run the same way against
+  [gonb](https://github.com/janpfeifer/gonb) (**1.44s**) the two are essentially tied — gonb
+  also compiles real Go, so raw CPU-bound speed isn't the difference; the difference is that
+  gonb recompiles and reruns its whole accumulated program every cell, rather than keeping
+  live state and goroutines in one process.
+- **Auto-import** — a cell can use `math.Sqrt(...)` with no `import "math"` line at all and it
+  just compiles: every cell is run through real `goimports` before building, not just gofmt.
+- **Go 1.25+** — builds and runs against current Go toolchains.
+
+A couple of smaller, still-genuine conveniences:
+
+- **Idempotent re-execution** — `:=` becomes `=` when every left-hand name already exists, so
+  re-running a cell doesn't hit Go's "no new variables" error; combined with the plugin cache
+  (keyed by the generated code's hash), re-running an unchanged cell is nearly free.
 - **Auto-display** — a bare last expression is captured and shown as the cell's result
   (Jupyter's `Out[n]`), instead of failing to compile.
-- **Plugin cache** — keyed by the generated code's hash; re-running a no-op cell doesn't
-  recompile.
-- **Panic resilience** — a panic in a cell (including nil dereferences) is caught and
-  reported as a normal error; the session keeps going.
 
 ## Installation
 
@@ -86,6 +110,8 @@ type naturally.
   across independent cells: same memory address throughout.
 - [examples/live-goroutines.ipynb](examples/live-goroutines.ipynb) — a background worker
   goroutine started in one cell, fed jobs from later ones.
+- [examples/generics.ipynb](examples/generics.ipynb) — a generic type declared in one cell,
+  its methods added in another, instantiated and used in a third.
 
 ## Known limitations
 
