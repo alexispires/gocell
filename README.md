@@ -9,9 +9,6 @@
 [![codecov](https://codecov.io/gh/alexispires/gocell/branch/main/graph/badge.svg)](https://codecov.io/gh/alexispires/gocell)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Fheavy-model.ipynb)
 
-*The Go gopher was designed by Renée French and is licensed under the Creative Commons 3.0
-Attributions license.*
-
 A Jupyter kernel for Go that runs every cell as a real compiled Go plugin
 (`-buildmode=plugin`), loaded into the kernel's own process. Session state — variables,
 goroutines, open connections — persists in memory across cells: no interpreter, no
@@ -101,3 +98,14 @@ type naturally.
 ## License
 
 [BSD 3-Clause](LICENSE)
+
+## Credits
+
+- Designed and driven by [Alexis Pires](https://github.com/alexispires), with
+  [Claude](https://claude.com/claude-code) (Sonnet 5), Anthropic's AI coding assistant, as a
+  pair-programmer on implementation.
+- Inspired by two existing Go Jupyter kernels: [gonb](https://github.com/janpfeifer/gonb) and
+  [gophernotes](https://github.com/gopherdata/gophernotes) — studying their design and test
+  suites directly shaped several of gocell's own decisions and tests.
+- The Go gopher was designed by Renée French and is licensed under the Creative Commons 3.0
+  Attributions license.
