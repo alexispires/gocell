@@ -92,7 +92,7 @@ func GeneratePluginCode(
 		bodySb.WriteString("\t// Point directly at existing symbols -- no copy, no write-back\n")
 		for name, sym := range analysis.UsedSymbols {
 			cleanTypeName := registrySymbolType(sym)
-			bodySb.WriteString(fmt.Sprintf("\t%s_ptr := (*%s)(ctx.GetPointer(%q))\n", name, cleanTypeName, name))
+			fmt.Fprintf(&bodySb, "\t%s_ptr := (*%s)(ctx.GetPointer(%q))\n", name, cleanTypeName, name)
 		}
 		bodySb.WriteString("\n")
 	}

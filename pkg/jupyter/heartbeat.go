@@ -18,7 +18,7 @@ func StartHeartbeat(ctx context.Context, conn *ConnectionInfo) error {
 	}
 
 	go func() {
-		defer socket.Close()
+		defer func() { _ = socket.Close() }()
 		for {
 			select {
 			case <-ctx.Done():

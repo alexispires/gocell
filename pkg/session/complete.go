@@ -70,8 +70,7 @@ func (s *Session) Complete(code string, cursorPos int) (matches []string, start,
 	}
 
 	seen := make(map[string]bool)
-	var add func(name string)
-	add = func(name string) {
+	add := func(name string) {
 		if name == "" || seen[name] || !strings.HasPrefix(name, prefix) {
 			return
 		}

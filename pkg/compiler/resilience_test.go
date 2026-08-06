@@ -17,7 +17,7 @@ func TestResilienceExplicitPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
 	}
-	defer wsMgr.CleanUp()
+	defer func() { _ = wsMgr.CleanUp() }()
 
 	reg := runtime.NewRegistry()
 	tr := runtime.NewTypeRegistry()
@@ -77,7 +77,7 @@ func TestResilienceNilPointerPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
 	}
-	defer wsMgr.CleanUp()
+	defer func() { _ = wsMgr.CleanUp() }()
 
 	reg := runtime.NewRegistry()
 	tr := runtime.NewTypeRegistry()

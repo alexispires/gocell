@@ -16,7 +16,7 @@ func runNotebookSession(t *testing.T, cells []string) *runtime.Context {
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
 	}
-	t.Cleanup(func() { wsMgr.CleanUp() })
+	t.Cleanup(func() { _ = wsMgr.CleanUp() })
 
 	reg := runtime.NewRegistry()
 	tr := runtime.NewTypeRegistry()

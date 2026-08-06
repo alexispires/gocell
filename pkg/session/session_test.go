@@ -28,7 +28,7 @@ func TestExecuteReusesCacheWhenGeneratedSourceIsUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
 	}
-	defer wsMgr.CleanUp()
+	defer func() { _ = wsMgr.CleanUp() }()
 
 	sess, err := New(wsMgr)
 	if err != nil {
@@ -68,7 +68,7 @@ func TestExecuteCapturesDisplayResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
 	}
-	defer wsMgr.CleanUp()
+	defer func() { _ = wsMgr.CleanUp() }()
 
 	sess, err := New(wsMgr)
 	if err != nil {
@@ -98,7 +98,7 @@ func TestExecutePanicReportsOriginalCellLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
 	}
-	defer wsMgr.CleanUp()
+	defer func() { _ = wsMgr.CleanUp() }()
 
 	sess, err := New(wsMgr)
 	if err != nil {

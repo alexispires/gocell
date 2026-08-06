@@ -21,7 +21,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to initialize workspace: %v\n", err)
 		os.Exit(1)
 	}
-	defer wsMgr.CleanUp()
+	defer func() { _ = wsMgr.CleanUp() }()
 
 	sess, err := session.New(wsMgr)
 	if err != nil {

@@ -54,7 +54,7 @@ func (l *Loader) LoadAndExecute(soPath string, ctx *runtime.Context) (err error)
 
 	sym, err := p.Lookup("Execute")
 	if err != nil {
-		return fmt.Errorf("Execute symbol not found in plugin %s: %w", soPath, err)
+		return fmt.Errorf("execute symbol not found in plugin %s: %w", soPath, err)
 	}
 
 	execFunc, ok := sym.(func(*runtime.Context) error)

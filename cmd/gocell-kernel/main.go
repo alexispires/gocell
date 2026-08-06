@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize workspace: %v", err)
 	}
-	defer wsMgr.CleanUp()
+	defer func() { _ = wsMgr.CleanUp() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -49,7 +49,7 @@ func main() {
 	if err := iopubSocket.Listen(iopubAddr); err != nil {
 		log.Fatalf("Failed to start IOPub socket on %s: %v", iopubAddr, err)
 	}
-	defer iopubSocket.Close()
+	defer func() { _ = iopubSocket.Close() }()
 
 	iopub := jupyter.NewIOPubNotifier(iopubSocket, []byte(conn.Key))
 

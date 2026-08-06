@@ -42,7 +42,7 @@ func (s *Server) StartShellLoop(ctx context.Context, iopub *IOPubNotifier) error
 	if err := socket.Listen(addr); err != nil {
 		return fmt.Errorf("failed to start Shell socket on %s: %w", addr, err)
 	}
-	defer socket.Close()
+	defer func() { _ = socket.Close() }()
 
 	key := []byte(s.conn.Key)
 

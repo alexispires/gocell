@@ -88,7 +88,7 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 	if err := iopubSocket.Listen(iopubAddr); err != nil {
 		t.Fatalf("Failed to listen on IOPub: %v", err)
 	}
-	t.Cleanup(func() { iopubSocket.Close() })
+	t.Cleanup(func() { _ = iopubSocket.Close() })
 
 	iopub := jupyter.NewIOPubNotifier(iopubSocket, []byte(conn.Key))
 
@@ -110,7 +110,7 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 	if err := clientShell.Dial(shellAddr); err != nil {
 		t.Fatalf("Failed to connect Shell client: %v", err)
 	}
-	t.Cleanup(func() { clientShell.Close() })
+	t.Cleanup(func() { _ = clientShell.Close() })
 
 	// A second fake client subscribed to IOPub, the channel that carries stream/error/
 	// execute_result content -- the shell reply alone only carries the execute_reply status.
@@ -121,7 +121,7 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 	if err := iopubSub.SetOption(zmq4.OptionSubscribe, ""); err != nil {
 		t.Fatalf("Failed to subscribe to IOPub: %v", err)
 	}
-	t.Cleanup(func() { iopubSub.Close() })
+	t.Cleanup(func() { _ = iopubSub.Close() })
 
 	// Give the listeners and the subscription time to establish before anything is sent --
 	// a PUB socket drops messages published before a SUB has finished subscribing.

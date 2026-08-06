@@ -41,7 +41,7 @@ func rewriteForTest(t *testing.T, code string, seed map[string]string) string {
 		Scopes: make(map[ast.Node]*types.Scope),
 	}
 	conf := types.Config{Error: func(error) {}, Importer: importer.Default(), DisableUnusedImportCheck: true}
-	conf.Check("main", cell.Fset, []*ast.File{file}, info)
+	_, _ = conf.Check("main", cell.Fset, []*ast.File{file}, info)
 
 	fn := findFuncDecl(file, analysisFuncName)
 	if fn == nil {

@@ -54,7 +54,7 @@ func ResolveMembers(codeBeforeDot string, reg *runtime.Registry, importTracker *
 		Importer:                 importer.Default(),
 		DisableUnusedImportCheck: true,
 	}
-	conf.Check("main", cell.Fset, []*ast.File{file}, info)
+	_, _ = conf.Check("main", cell.Fset, []*ast.File{file}, info)
 
 	tv, ok := info.Types[exprStmt.X]
 	if !ok || tv.Type == nil {

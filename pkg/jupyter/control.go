@@ -21,7 +21,7 @@ func StartControlLoop(ctx context.Context, conn *ConnectionInfo, iopub *IOPubNot
 	key := []byte(conn.Key)
 
 	go func() {
-		defer socket.Close()
+		defer func() { _ = socket.Close() }()
 		for {
 			select {
 			case <-ctx.Done():

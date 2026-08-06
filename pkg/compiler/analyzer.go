@@ -114,7 +114,7 @@ func analyzeWithTypeChecker(
 		Importer:                 importer.Default(),
 		DisableUnusedImportCheck: true,
 	}
-	conf.Check("main", cell.Fset, []*ast.File{file}, info)
+	_, _ = conf.Check("main", cell.Fset, []*ast.File{file}, info)
 
 	fn := findFuncDecl(file, analysisFuncName)
 	if fn == nil || fn.Body == nil || len(fn.Body.List) < len(candidates) {

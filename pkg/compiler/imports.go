@@ -92,9 +92,9 @@ func (it *ImportTracker) GenerateImportBlockForCode(codeBody string) string {
 		}
 
 		if spec.Alias != "" {
-			sb.WriteString(fmt.Sprintf("\t%s %s\n", spec.Alias, spec.Path))
+			fmt.Fprintf(&sb, "\t%s %s\n", spec.Alias, spec.Path)
 		} else {
-			sb.WriteString(fmt.Sprintf("\t%s\n", spec.Path))
+			fmt.Fprintf(&sb, "\t%s\n", spec.Path)
 		}
 	}
 	sb.WriteString(")\n")
