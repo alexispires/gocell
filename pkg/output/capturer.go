@@ -1,20 +1,24 @@
 package output
 
 import (
-	"io"
+	"bytes"
 	"os"
 	"sync"
 )
 
-// Capturer temporarily intercepts os.Stdout and os.Stderr while a cell executes.
+// Capturer temporarily intercepts os.Stdout and os.Stderr while a cell executes. Both pipes
+// are drained continuously from Start() onward, not just once in Stop(): the OS pipe buffer
+// is finite (~64KB), and a cell that writes past it would otherwise block on that write
+// forever, since nothing reads the other end until Stop() runs -- which never happens while
+// the cell itself is stuck blocked on the write.
 type Capturer struct {
 	mu         sync.Mutex
 	oldStdout  *os.File
 	oldStderr  *os.File
-	rOut, wOut *os.File
-	rErr, wErr *os.File
-	outBuf     []byte
-	errBuf     []byte
+	wOut, wErr *os.File
+	outBuf     bytes.Buffer
+	errBuf     bytes.Buffer
+	wg         sync.WaitGroup
 }
 
 // NewCapturer creates a new output interceptor.
@@ -22,7 +26,8 @@ func NewCapturer() *Capturer {
 	return &Capturer{}
 }
 
-// Start begins redirecting os.Stdout and os.Stderr to in-memory pipes.
+// Start begins redirecting os.Stdout and os.Stderr to in-memory pipes, and starts draining
+// both continuously in the background.
 func (c *Capturer) Start() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -40,55 +45,63 @@ func (c *Capturer) Start() error {
 
 	c.oldStdout = os.Stdout
 	c.oldStderr = os.Stderr
-
-	c.rOut = rOut
 	c.wOut = wOut
-	c.rErr = rErr
 	c.wErr = wErr
+	c.outBuf.Reset()
+	c.errBuf.Reset()
 
 	os.Stdout = wOut
 	os.Stderr = wErr
 
+	c.wg.Add(2)
+	go func() {
+		defer c.wg.Done()
+		c.drain(rOut, &c.outBuf)
+	}()
+	go func() {
+		defer c.wg.Done()
+		c.drain(rErr, &c.errBuf)
+	}()
+
 	return nil
 }
 
-// Stop stops the redirection, restores os.Stdout/os.Stderr, and returns the captured output.
+// drain continuously copies from r into buf until r hits EOF, which happens once its write
+// end is closed (in Stop). Writes to buf are guarded by c.mu, since Stop reads it too.
+func (c *Capturer) drain(r *os.File, buf *bytes.Buffer) {
+	defer func() { _ = r.Close() }()
+	chunk := make([]byte, 4096)
+	for {
+		n, err := r.Read(chunk)
+		if n > 0 {
+			c.mu.Lock()
+			buf.Write(chunk[:n])
+			c.mu.Unlock()
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// Stop stops the redirection, restores os.Stdout/os.Stderr, and returns the captured output
+// once both drain goroutines have finished (i.e. seen EOF on their pipe).
 func (c *Capturer) Stop() (stdoutStr string, stderrStr string, err error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	os.Stdout = c.oldStdout
 	os.Stderr = c.oldStderr
+	wOut, wErr := c.wOut, c.wErr
+	c.mu.Unlock()
 
-	if c.wOut != nil {
-		_ = c.wOut.Close()
+	if wOut != nil {
+		_ = wOut.Close()
 	}
-	if c.wErr != nil {
-		_ = c.wErr.Close()
+	if wErr != nil {
+		_ = wErr.Close()
 	}
+	c.wg.Wait()
 
-	var outChan = make(chan []byte)
-	var errChan = make(chan []byte)
-
-	go func() {
-		b, _ := io.ReadAll(c.rOut)
-		outChan <- b
-	}()
-
-	go func() {
-		b, _ := io.ReadAll(c.rErr)
-		errChan <- b
-	}()
-
-	c.outBuf = <-outChan
-	c.errBuf = <-errChan
-
-	if c.rOut != nil {
-		_ = c.rOut.Close()
-	}
-	if c.rErr != nil {
-		_ = c.rErr.Close()
-	}
-
-	return string(c.outBuf), string(c.errBuf), nil
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.outBuf.String(), c.errBuf.String(), nil
 }
