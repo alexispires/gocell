@@ -88,6 +88,105 @@ func TestCompleteMatchesKeywordsAndBuiltins(t *testing.T) {
 	}
 }
 
+// The cross-cell case: `foo` was declared and exported in an earlier, already-executed cell.
+func TestCompleteMemberFromEarlierCell(t *testing.T) {
+	sess := newTestSession(t)
+	if _, err := sess.Execute(`type Foo struct{ Name string; Age int }
+func (f *Foo) Greet() string { return "hi " + f.Name }
+foo := &Foo{Name: "Ada", Age: 30}`); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	code := "foo."
+	matches, start, end := sess.Complete(code, len(code))
+
+	if start != len(code) || end != len(code) {
+		t.Fatalf("Expected an empty-prefix range at %d, got [%d, %d)", len(code), start, end)
+	}
+	for _, want := range []string{"Name", "Age", "Greet"} {
+		found := false
+		for _, m := range matches {
+			if m == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("Expected %q among matches, got %v", want, matches)
+		}
+	}
+}
+
+// The same-cell case: `foo` was declared moments ago in the SAME, not-yet-submitted cell --
+// nothing has executed yet, so this can only work via static (go/types) resolution, not
+// anything reflection-based on a live Registry value.
+func TestCompleteMemberFromSameNotYetSubmittedCell(t *testing.T) {
+	sess := newTestSession(t)
+	if _, err := sess.Execute(`type Foo struct{ Name string }`); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	code := "foo := &Foo{Name: \"Ada\"}\nfoo."
+	matches, _, _ := sess.Complete(code, len(code))
+
+	found := false
+	for _, m := range matches {
+		if m == "Name" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("Expected 'Name' among matches for a same-cell, not-yet-executed variable, got %v", matches)
+	}
+}
+
+// Completion after a `.` filters by whatever prefix follows it, e.g. "foo.Na" -> "Name".
+func TestCompleteMemberWithPartialFieldPrefix(t *testing.T) {
+	sess := newTestSession(t)
+	if _, err := sess.Execute(`type Foo struct{ Name string; Nation string; Age int }
+foo := &Foo{}`); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	code := "foo.Na"
+	matches, start, end := sess.Complete(code, len(code))
+
+	if start != 4 || end != len(code) {
+		t.Fatalf("Expected range [4, %d), got [%d, %d)", len(code), start, end)
+	}
+	for _, want := range []string{"Name", "Nation"} {
+		found := false
+		for _, m := range matches {
+			if m == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("Expected %q among matches, got %v", want, matches)
+		}
+	}
+	if slices.Contains(matches, "Age") {
+		t.Fatalf("Expected 'Age' to be filtered out by the 'Na' prefix, got %v", matches)
+	}
+}
+
+// A member completion that can't be resolved (base expression too complex for this scope,
+// e.g. a chained call) falls back to plain name matching rather than returning nothing.
+func TestCompleteMemberFallsBackWhenUnresolvable(t *testing.T) {
+	sess := newTestSession(t)
+	if _, err := sess.Execute(`nameVariable := 42`); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	code := "foo.Bar().name"
+	matches, _, _ := sess.Complete(code, len(code))
+
+	if !slices.Contains(matches, "nameVariable") {
+		t.Fatalf("Expected fallback to plain matching to still find 'nameVariable', got %v", matches)
+	}
+}
+
 // Completion is computed mid-line, not just at the end of the whole code string --
 // cursorPos may be in the middle of a longer, still-being-typed cell.
 func TestCompleteUsesCursorPosNotEndOfString(t *testing.T) {

@@ -430,3 +430,44 @@ func TestJupyterZMQCompleteRequest(t *testing.T) {
 		t.Fatalf("Expected 'countdown' among complete_reply matches, got %v", content.Matches)
 	}
 }
+
+// TestJupyterZMQCompleteRequestMemberAccess exercises the go/types-backed `foo.` path over
+// the real ZMQ round trip, not just Session.Complete directly.
+func TestJupyterZMQCompleteRequestMemberAccess(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	reply := k.execute(t, `type Point struct{ X, Y int }
+p := &Point{X: 1, Y: 2}`)
+	var execStatus struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(reply.Content, &execStatus)
+	if execStatus.Status != "ok" {
+		t.Fatalf("Expected execute_reply status 'ok', got %q", execStatus.Status)
+	}
+
+	code := "p."
+	completeReply := k.complete(t, code, len(code))
+
+	var content struct {
+		Matches []string `json:"matches"`
+		Status  string   `json:"status"`
+	}
+	if err := json.Unmarshal(completeReply.Content, &content); err != nil {
+		t.Fatalf("Failed to decode complete_reply content: %v", err)
+	}
+	if content.Status != "ok" {
+		t.Fatalf("Expected complete_reply status 'ok', got %q", content.Status)
+	}
+	for _, want := range []string{"X", "Y"} {
+		found := false
+		for _, m := range content.Matches {
+			if m == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("Expected %q among complete_reply matches, got %v", want, content.Matches)
+		}
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"gocell/pkg/compiler"
 )
 
 // goKeywordsAndBuiltins is completed like any other known name -- Go's own keyword and
@@ -33,10 +35,18 @@ func isIdentRune(r rune) bool {
 
 // Complete returns candidate names for the identifier prefix ending at cursorPos in code,
 // along with the [start, end) byte range in code that a chosen match should replace -- the
-// shape complete_reply's cursor_start/cursor_end expect. Candidates are every name the
-// session already knows (variables, declared types/funcs, imported packages, Go keywords and
-// builtins) that starts with the prefix; matching a real value's fields/methods after a `.`
-// is not handled here (see CompleteMember).
+// shape complete_reply's cursor_start/cursor_end expect.
+//
+// If the prefix is immediately preceded by a `.` (completing `foo.` or `foo.Na`), this
+// resolves `foo`'s real go/types type (see compiler.ResolveMembers) and offers its actual
+// fields and methods instead. Only a single trailing identifier as the selector's base is
+// supported (`foo.`, not `foo.Bar().`) -- if that resolution fails for any reason (parse
+// error, unresolvable type, a base expression more complex than a bare identifier), this
+// falls back to plain name matching over everything the session knows, rather than going
+// silent: a less specific suggestion list beats none.
+//
+// Otherwise, candidates are every name the session already knows (variables, declared
+// types/funcs, imported packages, Go keywords and builtins) that starts with the prefix.
 func (s *Session) Complete(code string, cursorPos int) (matches []string, start, end int) {
 	if cursorPos < 0 || cursorPos > len(code) {
 		cursorPos = len(code)
@@ -52,6 +62,12 @@ func (s *Session) Complete(code string, cursorPos int) (matches []string, start,
 	}
 	end = cursorPos
 	prefix := code[start:end]
+
+	if start > 0 && code[start-1] == '.' {
+		if memberMatches, ok := s.completeMember(code[:start-1], prefix); ok {
+			return memberMatches, start, end
+		}
+	}
 
 	seen := make(map[string]bool)
 	var add func(name string)
@@ -78,6 +94,22 @@ func (s *Session) Complete(code string, cursorPos int) (matches []string, start,
 
 	sort.Strings(matches)
 	return matches, start, end
+}
+
+// completeMember resolves codeBeforeDot's trailing expression's real type and lists its
+// fields/methods matching prefix. ok is false when resolution fails for any reason -- Complete
+// falls back to plain name matching in that case, not an empty result.
+func (s *Session) completeMember(codeBeforeDot, prefix string) (matches []string, ok bool) {
+	members, err := compiler.ResolveMembers(codeBeforeDot, s.reg, s.importTracker, s.typeReg)
+	if err != nil {
+		return nil, false
+	}
+	for _, name := range members {
+		if strings.HasPrefix(name, prefix) {
+			matches = append(matches, name)
+		}
+	}
+	return matches, true
 }
 
 // typeRegistryCandidateName recovers the plain, typeable name from a TypeRegistry key. Keys
