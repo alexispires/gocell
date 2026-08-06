@@ -44,7 +44,7 @@ func TestDisplayLastExpression(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to analyze: %v", err)
 		}
-		generated := compiler.GeneratePluginCode(parsed, analysis, importTracker, tr)
+		generated, _ := compiler.GeneratePluginCode(parsed, analysis, importTracker, tr)
 		soPath, err := builder.BuildPlugin(cellDir, generated)
 		if err != nil {
 			t.Fatalf("Failed to compile: %v\nGenerated code:\n%s", err, generated)

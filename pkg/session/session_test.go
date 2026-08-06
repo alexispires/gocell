@@ -2,6 +2,7 @@ package session
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"gocell/pkg/workspace"
@@ -84,5 +85,32 @@ func TestExecuteCapturesDisplayResult(t *testing.T) {
 	}
 	if !res.HasDisplay || res.DisplayText != "42" {
 		t.Fatalf("Expected display '42', got %+v", res)
+	}
+}
+
+// Regression test for a panic's reported line number: it must point at the cell's own
+// source line, not the generated plugin file's (which has hydration/import/declaration
+// boilerplate ahead of the cell's statements, so its own line numbers mean nothing to the
+// user). The nil dereference below is deliberately not on line 1, so this also exercises the
+// offset arithmetic, not just a coincidental 1:1 case.
+func TestExecutePanicReportsOriginalCellLine(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer wsMgr.CleanUp()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	code := "x := 1\ny := 2\nvar p *int\n_ = *p\nz := 3"
+	_, err = sess.Execute(code)
+	if err == nil {
+		t.Fatalf("Expected the nil dereference to be caught as an error")
+	}
+	if !strings.Contains(err.Error(), "line 4") {
+		t.Fatalf("Expected the error to report the cell's own line 4 (where '_ = *p' is), got: %v", err)
 	}
 }

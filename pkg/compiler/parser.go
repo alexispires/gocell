@@ -8,6 +8,19 @@ import (
 	"strings"
 )
 
+// stmtWrapperPreamble is prepended to a cell's own statement lines before parsing them (see
+// ParseCell step 4), so a cell's statements can be extracted from a real, valid Go file. Every
+// line here before the cell's own first statement line shifts that statement's parsed
+// position accordingly -- stmtWrapperPreambleLines is that shift, in lines, kept in sync with
+// this string by the test in parser_test.go. Used by GeneratePluginCode's line mapping (see
+// LineMapping) to translate a cell.Stmts node's own Pos() back to the line the user actually
+// typed, undoing this preamble.
+const stmtWrapperPreamble = "package main\n\nfunc __gocell_wrapper() {\n"
+
+// stmtWrapperPreambleLines is strings.Count(stmtWrapperPreamble, "\n") -- a literal since Go
+// constants can't call strings.Count, kept honest by TestStmtWrapperPreambleLinesMatchesPreamble.
+const stmtWrapperPreambleLines = 3
+
 // CellContent holds the result of breaking a cell down into an AST.
 type CellContent struct {
 	Imports   []*ast.ImportSpec
@@ -121,7 +134,7 @@ func ParseCell(code string) (*CellContent, error) {
 
 	// 4. Extract statements
 	if len(stmtLines) > 0 {
-		stmtSrc := "package main\n\nfunc __gocell_wrapper() {\n" + strings.Join(stmtLines, "\n") + "\n}"
+		stmtSrc := stmtWrapperPreamble + strings.Join(stmtLines, "\n") + "\n}"
 		if stmtNode, errStmt := parser.ParseFile(fset, "stmt.go", stmtSrc, parser.ParseComments); errStmt == nil {
 			for _, decl := range stmtNode.Decls {
 				if f, ok := decl.(*ast.FuncDecl); ok && f.Name.Name == "__gocell_wrapper" {

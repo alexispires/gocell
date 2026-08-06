@@ -30,13 +30,25 @@ var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	ptr_{{.}
 	ctx.SetPointer({{printf "%q" .}}, fmt.Sprintf("%T", &{{.}}), ptr_{{.}}, keepAlive_{{.}})
 `))
 
-// GeneratePluginCode generates the complete Go source of a cell plugin for compilation.
+// LineMapping records that GeneratedLine, in the plugin source GeneratePluginCode produced,
+// prints the start of the same statement that begins at OriginalLine in the cell's own source
+// (cell.RawCode). Only top-level cell statements are covered -- not re-injected declarations
+// from earlier cells, whose position in the generated file doesn't correspond to any single
+// cell's line numbers at all.
+type LineMapping struct {
+	GeneratedLine int
+	OriginalLine  int
+}
+
+// GeneratePluginCode generates the complete Go source of a cell plugin for compilation, along
+// with a mapping from generated-file line numbers back to the cell's own source lines (used to
+// report a panic's location in terms the user actually typed, not the generated file's).
 func GeneratePluginCode(
 	cell *CellContent,
 	analysis *AnalysisResult,
 	importTracker *ImportTracker,
 	typeRegistry *runtime.TypeRegistry,
-) string {
+) (string, []LineMapping) {
 	for _, imp := range cell.Imports {
 		alias := ""
 		if imp.Name != nil {
@@ -78,8 +90,24 @@ func GeneratePluginCode(
 	}
 
 	bodySb.WriteString("\t// Cell statements (used symbols already rewritten to go through their _ptr)\n")
+
+	// relLine tracks the current line number within bodySb (1-indexed), so each statement's
+	// generated start line can be recorded before any of its own text is written.
+	relLine := strings.Count(bodySb.String(), "\n") + 1
+	var mappings []LineMapping
+
 	for i, stmt := range cell.Stmts {
 		isLast := i == len(cell.Stmts)-1
+
+		if cell.Fset != nil {
+			// stmt.Pos() is relative to the synthetic wrapper ParseCell parsed the cell's
+			// statements from (see stmtWrapperPreamble) -- undo that preamble's line count to
+			// get back to the line the user actually typed.
+			mappings = append(mappings, LineMapping{
+				GeneratedLine: relLine,
+				OriginalLine:  cell.Fset.Position(stmt.Pos()).Line - stmtWrapperPreambleLines,
+			})
+		}
 
 		// The last statement, if it is a bare expression that would not already be a valid
 		// standalone Go statement (i.e. not a function/method call), is turned into a
@@ -89,7 +117,9 @@ func GeneratePluginCode(
 				if _, isCall := exprStmt.X.(*ast.CallExpr); !isCall {
 					var exprBuf strings.Builder
 					if err := printer.Fprint(&exprBuf, fset, exprStmt.X); err == nil {
-						bodySb.WriteString(fmt.Sprintf("\tctx.SetResult(fmt.Sprintf(\"%%#v\", %s))\n", exprBuf.String()))
+						line := fmt.Sprintf("\tctx.SetResult(fmt.Sprintf(\"%%#v\", %s))\n", exprBuf.String())
+						bodySb.WriteString(line)
+						relLine += strings.Count(line, "\n")
 						continue
 					}
 				}
@@ -101,6 +131,7 @@ func GeneratePluginCode(
 			lines := strings.Split(buf.String(), "\n")
 			for _, line := range lines {
 				bodySb.WriteString("\t" + line + "\n")
+				relLine++
 			}
 		}
 	}
@@ -134,9 +165,14 @@ func GeneratePluginCode(
 	sb.WriteString("\t_ = reflect.ValueOf\n")
 	sb.WriteString(")\n\n")
 
+	prefixLines := strings.Count(sb.String(), "\n")
 	sb.WriteString(bodyCodeStr)
 
-	return sb.String()
+	for i := range mappings {
+		mappings[i].GeneratedLine += prefixLines
+	}
+
+	return sb.String(), mappings
 }
 
 // cellDecl is one type/function/method declaration from a cell, under the key it is

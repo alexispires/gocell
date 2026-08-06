@@ -5,6 +5,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 
 	"gocell/pkg/compiler"
@@ -68,7 +69,7 @@ func (s *Session) Execute(code string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	pluginSource := compiler.GeneratePluginCode(cell, analysis, s.importTracker, s.typeReg)
+	pluginSource, lineMappings := compiler.GeneratePluginCode(cell, analysis, s.importTracker, s.typeReg)
 
 	// The generated source fully captures everything the compiled binary depends on, so
 	// its hash alone safely identifies a reusable build.
@@ -92,6 +93,7 @@ func (s *Session) Execute(code string) (Result, error) {
 	_ = capturer.Start()
 	execErr := s.loader.LoadAndExecute(soPath, s.ctx)
 	stdoutStr, stderrStr, _ := capturer.Stop()
+	execErr = remapPanicError(execErr, lineMappings)
 
 	displayText, hasDisplay := s.ctx.TakeResult()
 
@@ -102,4 +104,31 @@ func (s *Session) Execute(code string) (Result, error) {
 		HasDisplay:  hasDisplay,
 	}
 	return res, execErr
+}
+
+// remapPanicError rewrites a *plugin.PanicError's generated-file line number back into the
+// cell's own line number, using the mapping GeneratePluginCode produced for this specific
+// cell -- session is the only place that has both the mapping and the error. Any other error
+// is returned unchanged, as is a PanicError whose line couldn't be located in the mapping
+// (e.g. because it happened inside a function declared by an earlier cell, re-injected into
+// this one, rather than this cell's own top-level statements).
+func remapPanicError(err error, mappings []compiler.LineMapping) error {
+	var panicErr *plugin.PanicError
+	if !errors.As(err, &panicErr) || panicErr.GeneratedLine == 0 {
+		return err
+	}
+
+	var best *compiler.LineMapping
+	for i := range mappings {
+		m := &mappings[i]
+		if m.GeneratedLine <= panicErr.GeneratedLine && (best == nil || m.GeneratedLine > best.GeneratedLine) {
+			best = m
+		}
+	}
+	if best == nil {
+		return err
+	}
+
+	originalLine := best.OriginalLine + (panicErr.GeneratedLine - best.GeneratedLine)
+	return fmt.Errorf("panic in cell, line %d: %v", originalLine, panicErr.Value)
 }

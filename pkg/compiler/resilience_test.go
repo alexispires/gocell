@@ -29,7 +29,7 @@ func TestResilienceExplicitPanic(t *testing.T) {
 	cellDir1, _, _ := wsMgr.CreateCellDir()
 	p1, _ := compiler.ParseCell(`a := 10`)
 	an1, _ := compiler.AnalyzeCell(p1, reg, importTracker, tr)
-	g1 := compiler.GeneratePluginCode(p1, an1, importTracker, tr)
+	g1, _ := compiler.GeneratePluginCode(p1, an1, importTracker, tr)
 	so1, _ := builder.BuildPlugin(cellDir1, g1)
 	if err := loader.LoadAndExecute(so1, ctx); err != nil {
 		t.Fatalf("Cell 1 failed: %v", err)
@@ -39,7 +39,7 @@ func TestResilienceExplicitPanic(t *testing.T) {
 	cellDir2, _, _ := wsMgr.CreateCellDir()
 	p2, _ := compiler.ParseCell(`panic("simulated fatal error")`)
 	an2, _ := compiler.AnalyzeCell(p2, reg, importTracker, tr)
-	g2 := compiler.GeneratePluginCode(p2, an2, importTracker, tr)
+	g2, _ := compiler.GeneratePluginCode(p2, an2, importTracker, tr)
 	so2, _ := builder.BuildPlugin(cellDir2, g2)
 
 	errPanic := loader.LoadAndExecute(so2, ctx)
@@ -55,7 +55,7 @@ func TestResilienceExplicitPanic(t *testing.T) {
 	cellDir3, _, _ := wsMgr.CreateCellDir()
 	p3, _ := compiler.ParseCell(`b := a + 20`)
 	an3, _ := compiler.AnalyzeCell(p3, reg, importTracker, tr)
-	g3 := compiler.GeneratePluginCode(p3, an3, importTracker, tr)
+	g3, _ := compiler.GeneratePluginCode(p3, an3, importTracker, tr)
 	so3, _ := builder.BuildPlugin(cellDir3, g3)
 	if err := loader.LoadAndExecute(so3, ctx); err != nil {
 		t.Fatalf("Cell 3 failed after panic: %v", err)
@@ -87,7 +87,7 @@ func TestResilienceNilPointerPanic(t *testing.T) {
 	cellDir1, _, _ := wsMgr.CreateCellDir()
 	p1, _ := compiler.ParseCell(`var ptr *int; *ptr = 100`)
 	an1, _ := compiler.AnalyzeCell(p1, reg, importTracker, tr)
-	g1 := compiler.GeneratePluginCode(p1, an1, importTracker, tr)
+	g1, _ := compiler.GeneratePluginCode(p1, an1, importTracker, tr)
 	so1, _ := builder.BuildPlugin(cellDir1, g1)
 
 	errPanic := loader.LoadAndExecute(so1, ctx)
@@ -99,7 +99,7 @@ func TestResilienceNilPointerPanic(t *testing.T) {
 	cellDir2, _, _ := wsMgr.CreateCellDir()
 	p2, _ := compiler.ParseCell(`recoveredVar := 99`)
 	an2, _ := compiler.AnalyzeCell(p2, reg, importTracker, tr)
-	g2 := compiler.GeneratePluginCode(p2, an2, importTracker, tr)
+	g2, _ := compiler.GeneratePluginCode(p2, an2, importTracker, tr)
 	so2, _ := builder.BuildPlugin(cellDir2, g2)
 	if err := loader.LoadAndExecute(so2, ctx); err != nil {
 		t.Fatalf("Cell 2 failed: %v", err)

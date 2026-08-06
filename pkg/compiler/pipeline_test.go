@@ -44,7 +44,7 @@ func runNotebookSession(t *testing.T, cells []string) *runtime.Context {
 		if err != nil {
 			t.Fatalf("Failed to analyze: %v", err)
 		}
-		generatedCode := compiler.GeneratePluginCode(parsed, analysis, importTracker, tr)
+		generatedCode, _ := compiler.GeneratePluginCode(parsed, analysis, importTracker, tr)
 
 		soPath, err := builder.BuildPlugin(cellDir, generatedCode)
 		if err != nil {
