@@ -188,6 +188,35 @@ func (k *zmqTestKernel) complete(t *testing.T, code string, cursorPos int) *jupy
 	return replyMsg
 }
 
+// isComplete sends an is_complete_request and returns the decoded is_complete_reply.
+func (k *zmqTestKernel) isComplete(t *testing.T, code string) *jupyter.Message {
+	t.Helper()
+
+	reqContent, _ := json.Marshal(map[string]string{"code": code})
+	req := &jupyter.Message{
+		Identities:   [][]byte{[]byte("client-dealer")},
+		Header:       jupyter.NewHeader("is_complete_request", "session-1"),
+		ParentHeader: jupyter.Header{},
+		Metadata:     make(map[string]any),
+		Content:      reqContent,
+	}
+
+	zmsg, _ := jupyter.EncodeMessage(req, k.key)
+	if err := k.clientShell.Send(zmsg); err != nil {
+		t.Fatalf("Failed to send is_complete_request: %v", err)
+	}
+
+	replyZMsg, err := k.clientShell.Recv()
+	if err != nil {
+		t.Fatalf("Failed to receive is_complete_reply: %v", err)
+	}
+	replyMsg, err := jupyter.DecodeMessage(replyZMsg, k.key)
+	if err != nil {
+		t.Fatalf("Failed to decode is_complete_reply: %v", err)
+	}
+	return replyMsg
+}
+
 // recvIOPubUntil reads IOPub messages (with a short per-message timeout) until one matches
 // msgType, and fails the test if none arrives within the overall deadline.
 func (k *zmqTestKernel) recvIOPubUntil(t *testing.T, msgType string) *jupyter.Message {
@@ -469,5 +498,37 @@ p := &Point{X: 1, Y: 2}`)
 		if !found {
 			t.Fatalf("Expected %q among complete_reply matches, got %v", want, content.Matches)
 		}
+	}
+}
+
+// TestJupyterZMQIsCompleteRequest verifies is_complete_request now actually reflects brace
+// balance instead of always answering "complete" -- and specifically that a `{` inside a
+// string literal (the exact bug this session fixed) doesn't fool it into reporting
+// "incomplete" for already-finished code.
+func TestJupyterZMQIsCompleteRequest(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	cases := []struct {
+		name string
+		code string
+		want string
+	}{
+		{"balanced", "if true {\n\tx := 1\n}", "complete"},
+		{"still open", "if true {\n\tx := 1", "incomplete"},
+		{"brace inside a string", `fmt.Println("Result: {")`, "complete"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			reply := k.isComplete(t, c.code)
+			var content struct {
+				Status string `json:"status"`
+			}
+			if err := json.Unmarshal(reply.Content, &content); err != nil {
+				t.Fatalf("Failed to decode is_complete_reply content: %v", err)
+			}
+			if content.Status != c.want {
+				t.Fatalf("Expected status %q for %q, got %q", c.want, c.code, content.Status)
+			}
+		})
 	}
 }

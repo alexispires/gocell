@@ -58,7 +58,7 @@ func ParseCell(code string) (*CellContent, error) {
 
 	inImport := false
 	inBlockDecl := false
-	braceCount := 0
+	var blockLines []string // lines accumulated so far for the current type/func block
 
 	for _, l := range lines {
 		t := strings.TrimSpace(l)
@@ -91,16 +91,18 @@ func ParseCell(code string) (*CellContent, error) {
 		}
 
 		// Type or function block (e.g. type X struct, func foo())
-		if strings.HasPrefix(t, "type ") || strings.HasPrefix(t, "func ") {
+		if !inBlockDecl && (strings.HasPrefix(t, "type ") || strings.HasPrefix(t, "func ")) {
 			inBlockDecl = true
+			blockLines = nil
 		}
 
 		if inBlockDecl {
 			declLines = append(declLines, l)
-			braceCount += strings.Count(l, "{") - strings.Count(l, "}")
-			if braceCount <= 0 {
+			blockLines = append(blockLines, l)
+			// Token-aware, not a raw character count: a `{`/`}` sitting inside a string,
+			// rune literal, or comment on this line must not be mistaken for a real one.
+			if BraceDepth(strings.Join(blockLines, "\n")) <= 0 {
 				inBlockDecl = false
-				braceCount = 0
 			}
 		} else {
 			stmtLines = append(stmtLines, l)

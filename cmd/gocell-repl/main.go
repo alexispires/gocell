@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"gocell/pkg/compiler"
 	"gocell/pkg/session"
 	"gocell/pkg/workspace"
 )
@@ -31,38 +32,39 @@ func main() {
 	fmt.Println("gocell - standalone Go REPL (Ctrl+D to exit)")
 
 	var buf strings.Builder
-	braceDepth := 0
 
-	printPrompt := func() {
-		if braceDepth > 0 {
+	printPrompt := func(continuation bool) {
+		if continuation {
 			fmt.Print("...> ")
 		} else {
 			fmt.Print("gocell> ")
 		}
 	}
 
-	printPrompt()
+	printPrompt(false)
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Text()
-		braceDepth += strings.Count(line, "{") - strings.Count(line, "}")
 		buf.WriteString(line)
 		buf.WriteString("\n")
 
-		if braceDepth > 0 {
-			printPrompt()
+		// Token-aware, not a raw character count: a `{`/`}` sitting inside a string, rune
+		// literal, or comment must not be mistaken for a real, still-open block -- e.g.
+		// `fmt.Println("Result: {")` used to hang here forever waiting for a `}` that was
+		// already there, textually, inside the string.
+		if compiler.BraceDepth(buf.String()) > 0 {
+			printPrompt(true)
 			continue
 		}
 
 		code := buf.String()
 		buf.Reset()
-		braceDepth = 0
 
 		if strings.TrimSpace(code) != "" {
 			runCell(sess, code)
 		}
 
-		printPrompt()
+		printPrompt(false)
 	}
 	fmt.Println()
 }

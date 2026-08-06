@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-zeromq/zmq4"
 
+	"gocell/pkg/compiler"
 	"gocell/pkg/session"
 	"gocell/pkg/workspace"
 )
@@ -116,8 +117,20 @@ func (s *Server) handleKernelInfoRequest(socket zmq4.Socket, msg *Message, key [
 }
 
 func (s *Server) handleIsCompleteRequest(socket zmq4.Socket, msg *Message, key []byte) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	_ = json.Unmarshal(msg.Content, &req)
+
+	status := "complete"
+	if compiler.BraceDepth(req.Code) > 0 {
+		status = "incomplete"
+	}
+	// indent is deliberately empty even when incomplete: gocell does no auto-indentation of
+	// continuation lines by design (see gocell-repl), so there's nothing honest to suggest.
 	content, _ := json.Marshal(map[string]string{
-		"status": "complete",
+		"status": status,
+		"indent": "",
 	})
 
 	replyMsg := &Message{
