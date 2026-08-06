@@ -2,6 +2,13 @@
 
 <img src="logo.png" alt="gocell logo" width="220">
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/alexispires/gocell.svg)](https://pkg.go.dev/github.com/alexispires/gocell)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
+[![CI](https://github.com/alexispires/gocell/actions/workflows/ci.yml/badge.svg)](https://github.com/alexispires/gocell/actions/workflows/ci.yml)
+[![Lint](https://github.com/alexispires/gocell/actions/workflows/lint.yml/badge.svg)](https://github.com/alexispires/gocell/actions/workflows/lint.yml)
+[![codecov](https://codecov.io/gh/alexispires/gocell/branch/main/graph/badge.svg)](https://codecov.io/gh/alexispires/gocell)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Fheavy-model.ipynb)
+
 *The Go gopher was designed by Renée French and is licensed under the Creative Commons 3.0
 Attributions license.*
 
