@@ -2,6 +2,9 @@
 
 <img src="logo.png" alt="gocell logo" width="220">
 
+*The Go gopher was designed by Renée French and is licensed under the Creative Commons 3.0
+Attributions license.*
+
 A Jupyter kernel for Go that runs every cell as a real compiled Go plugin
 (`-buildmode=plugin`), loaded into the kernel's own process. Session state — variables,
 goroutines, open connections — persists in memory across cells: no interpreter, no
@@ -87,3 +90,7 @@ type naturally.
   re-running the same cell nearly free). Only restarting the kernel reclaims it.
 - **No Windows support**, and the kernel and every cell plugin must share a Go toolchain
   version (handled automatically, see [pkg/compiler/builder.go](pkg/compiler/builder.go)).
+
+## License
+
+[BSD 3-Clause](LICENSE)
