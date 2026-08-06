@@ -3,8 +3,8 @@ package compiler_test
 import (
 	"testing"
 
-	"gocell/pkg/compiler"
-	"gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/runtime"
 )
 
 // analyzeCell seeds a Registry the way earlier cells would have and analyzes one cell,

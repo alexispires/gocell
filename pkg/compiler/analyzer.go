@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 
-	"gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/runtime"
 )
 
 // AnalysisResult holds the results of analyzing a cell.

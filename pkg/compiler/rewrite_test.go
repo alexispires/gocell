@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/runtime"
 )
 
 // rewriteForTest parses code, seeds a Registry-shaped `existing` map from seed (name -> Go

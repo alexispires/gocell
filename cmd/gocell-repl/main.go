@@ -10,9 +10,9 @@ import (
 	"os"
 	"strings"
 
-	"gocell/pkg/compiler"
-	"gocell/pkg/session"
-	"gocell/pkg/workspace"
+	"github.com/alexispires/gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/session"
+	"github.com/alexispires/gocell/pkg/workspace"
 )
 
 func main() {

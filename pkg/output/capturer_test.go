@@ -2,7 +2,7 @@ package output_test
 
 import (
 	"fmt"
-	"gocell/pkg/output"
+	"github.com/alexispires/gocell/pkg/output"
 	"os"
 	"strings"
 	"testing"

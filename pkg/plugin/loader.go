@@ -6,7 +6,7 @@ import (
 	pluginGo "plugin"
 	goruntime "runtime"
 
-	"gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/runtime"
 )
 
 // ExecutorFunc is the signature of the Execute function generated in each cell plugin.

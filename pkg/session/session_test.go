@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"gocell/pkg/workspace"
+	"github.com/alexispires/gocell/pkg/workspace"
 )
 
 // countCellDirs counts the compilation subdirectories already created in the workspace;

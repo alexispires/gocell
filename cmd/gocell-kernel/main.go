@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-zeromq/zmq4"
 
-	"gocell/pkg/jupyter"
-	"gocell/pkg/workspace"
+	"github.com/alexispires/gocell/pkg/jupyter"
+	"github.com/alexispires/gocell/pkg/workspace"
 )
 
 func main() {

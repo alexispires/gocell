@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode"
 
-	"gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/compiler"
 )
 
 // goKeywordsAndBuiltins is completed like any other known name -- Go's own keyword and
@@ -129,7 +129,7 @@ func typeRegistryCandidateName(key string) string {
 }
 
 // importedPackageName is how an import is actually referred to in code: its alias if it has
-// one, otherwise the last path segment -- e.g. `"gocell/pkg/runtime"` (no alias) is referred
+// one, otherwise the last path segment -- e.g. `"github.com/alexispires/gocell/pkg/runtime"` (no alias) is referred
 // to as `runtime`, matching Go's own default-name-from-path-segment rule.
 func importedPackageName(alias, path string) string {
 	if alias != "" && alias != "_" && alias != "." {

@@ -2,12 +2,14 @@ package compiler
 
 import (
 	"fmt"
+	"github.com/alexispires/gocell/pkg/runtime"
 	"go/ast"
 	"go/printer"
 	"go/token"
-	"gocell/pkg/runtime"
 	"strings"
 	"text/template"
+
+	"golang.org/x/tools/imports"
 )
 
 // exportVarTemplate generates the block that exports a new variable to the shared Registry:
@@ -77,7 +79,13 @@ func GeneratePluginCode(
 		}
 	}
 
-	bodySb.WriteString("// --- Plugin Execute entry point ---\n")
+	// anchorRelLine records this comment's own line number within bodySb (same 1-indexed
+	// scheme as relLine below), so it can be relocated in the goimports-formatted output
+	// afterward -- see the comment above the imports.Process call near the end of this
+	// function for why that relocation is necessary.
+	anchorRelLine := strings.Count(bodySb.String(), "\n") + 1
+	const anchorComment = "// --- Plugin Execute entry point ---"
+	bodySb.WriteString(anchorComment + "\n")
 	bodySb.WriteString("func Execute(ctx *runtime.Context) error {\n")
 
 	if len(analysis.UsedSymbols) > 0 {
@@ -172,7 +180,34 @@ func GeneratePluginCode(
 		mappings[i].GeneratedLine += prefixLines
 	}
 
-	return sb.String(), mappings
+	rawSource := sb.String()
+
+	// goimports groups a domain-shaped import path (github.com/...) away from the stdlib
+	// imports above it, inserting a blank line that isn't present in rawSource -- silently
+	// shifting every line below it by one in the file that actually gets compiled. Formatting
+	// here, before returning, and correcting `mappings` by relocating anchorComment in the
+	// formatted output keeps GeneratedLine accurate regardless of how much the import block
+	// grows or shrinks; BuildPlugin then compiles this already-formatted source as-is.
+	formatted, err := imports.Process("main.go", []byte(rawSource), &imports.Options{
+		Comments:   true,
+		TabIndent:  true,
+		TabWidth:   8,
+		FormatOnly: false,
+	})
+	if err != nil {
+		return rawSource, mappings
+	}
+
+	finalSource := string(formatted)
+	if idx := strings.Index(finalSource, anchorComment); idx >= 0 {
+		finalAnchorLine := strings.Count(finalSource[:idx], "\n") + 1
+		delta := finalAnchorLine - (anchorRelLine + prefixLines)
+		for i := range mappings {
+			mappings[i].GeneratedLine += delta
+		}
+	}
+
+	return finalSource, mappings
 }
 
 // cellDecl is one type/function/method declaration from a cell, under the key it is

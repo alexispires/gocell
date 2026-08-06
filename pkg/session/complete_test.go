@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"gocell/pkg/workspace"
+	"github.com/alexispires/gocell/pkg/workspace"
 )
 
 func newTestSession(t *testing.T) *Session {

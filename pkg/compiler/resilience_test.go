@@ -1,10 +1,10 @@
 package compiler_test
 
 import (
-	"gocell/pkg/compiler"
-	"gocell/pkg/plugin"
-	"gocell/pkg/runtime"
-	"gocell/pkg/workspace"
+	"github.com/alexispires/gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/plugin"
+	"github.com/alexispires/gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/workspace"
 	"strings"
 	"testing"
 )

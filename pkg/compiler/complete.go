@@ -7,7 +7,7 @@ import (
 	"go/types"
 	"sort"
 
-	"gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/runtime"
 )
 
 // ResolveMembers answers "what's valid after `foo.`" for a cell that's still being typed:

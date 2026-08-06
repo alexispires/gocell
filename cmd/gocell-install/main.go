@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"gocell/pkg/installer"
+	"github.com/alexispires/gocell/pkg/installer"
 )
 
 func main() {

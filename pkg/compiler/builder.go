@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"golang.org/x/mod/modfile"
-	"golang.org/x/tools/imports"
 )
 
 // defaultCellGoVersion is used if the host go.mod's `go` directive cannot be found or
@@ -35,7 +34,7 @@ func isGocellModule(dir string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(content), "module gocell")
+	return strings.Contains(string(content), "module github.com/alexispires/gocell")
 }
 
 // NewBuilder creates a new Builder by discovering the host gocell module.
@@ -119,8 +118,8 @@ func (b *Builder) BuildPlugin(cellDir string, sourceCode string) (string, error)
 
 go %s
 
-require gocell v0.0.0
-replace gocell => %q
+require github.com/alexispires/gocell v0.0.0
+replace github.com/alexispires/gocell => %q
 `, b.goVersion, cleanRoot)
 
 	goModPath := filepath.Join(cellDir, "go.mod")
@@ -130,18 +129,9 @@ replace gocell => %q
 
 	mainGoPath := filepath.Join(cellDir, "main.go")
 
-	// Clean up via goimports (automatic AST resolution and removal of unused imports)
-	opts := &imports.Options{
-		Comments:   true,
-		TabIndent:  true,
-		TabWidth:   8,
-		FormatOnly: false,
-	}
-	formattedCode, err := imports.Process(mainGoPath, []byte(sourceCode), opts)
-	if err == nil {
-		sourceCode = string(formattedCode)
-	}
-
+	// sourceCode is already goimports-formatted by GeneratePluginCode, which also relies on
+	// that formatted output to keep its panic-line mapping accurate -- reformatting again here
+	// would risk silently invalidating it.
 	if err := os.WriteFile(mainGoPath, []byte(sourceCode), 0644); err != nil {
 		return "", fmt.Errorf("failed to write file %s: %w", mainGoPath, err)
 	}

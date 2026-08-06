@@ -1,4 +1,4 @@
-module gocell
+module github.com/alexispires/gocell
 
 go 1.25.0
 

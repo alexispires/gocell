@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-zeromq/zmq4"
 
-	"gocell/pkg/compiler"
-	"gocell/pkg/session"
-	"gocell/pkg/workspace"
+	"github.com/alexispires/gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/session"
+	"github.com/alexispires/gocell/pkg/workspace"
 )
 
 // Server manages the main Jupyter kernel server.

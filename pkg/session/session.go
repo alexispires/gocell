@@ -8,11 +8,11 @@ import (
 	"errors"
 	"fmt"
 
-	"gocell/pkg/compiler"
-	"gocell/pkg/output"
-	"gocell/pkg/plugin"
-	"gocell/pkg/runtime"
-	"gocell/pkg/workspace"
+	"github.com/alexispires/gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/output"
+	"github.com/alexispires/gocell/pkg/plugin"
+	"github.com/alexispires/gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/workspace"
 )
 
 // Session holds everything needed to compile and run a sequence of cells that share state.
