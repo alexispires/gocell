@@ -4,6 +4,8 @@ import "testing"
 
 // Test declaring structs and their associated methods
 func TestDeclarationStructAndMethod(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Counter struct { Count int }`,
 		`func (c *Counter) Inc() { c.Count++ }`,
@@ -20,6 +22,8 @@ func TestDeclarationStructAndMethod(t *testing.T) {
 
 // Test declaring global functions
 func TestDeclarationFunction(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`func multiply(a, b int) int { return a * b }`,
 		`res := multiply(6, 7)`,
@@ -34,6 +38,8 @@ func TestDeclarationFunction(t *testing.T) {
 
 // Test interfaces and polymorphism (duck typing)
 func TestDeclarationInterface(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Runner interface { Run() string }`,
 		`type Robot struct { Name string }`,
@@ -51,6 +57,8 @@ func TestDeclarationInterface(t *testing.T) {
 
 // Test nested pointers inside structs
 func TestDeclarationNestedStructPointers(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Address struct { City string }`,
 		`type Person struct { Name string; Addr *Address }`,
@@ -68,6 +76,8 @@ func TestDeclarationNestedStructPointers(t *testing.T) {
 
 // Test variable shadowing inside a local block
 func TestDeclarationVariableShadowing(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`x := 100`,
 		`if true { x := 999; _ = x }`,
@@ -83,6 +93,8 @@ func TestDeclarationVariableShadowing(t *testing.T) {
 
 // Test recursive structs and functions
 func TestDeclarationRecursiveStruct(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Node struct { Value int; Next *Node }`,
 		`func sumList(n *Node) int { if n == nil { return 0 }; return n.Value + sumList(n.Next) }`,
@@ -99,6 +111,8 @@ func TestDeclarationRecursiveStruct(t *testing.T) {
 
 // Test type redefinition (overriding a previous declaration)
 func TestDeclarationTypeRedefinition(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Point struct { X int }`,
 		`type Point struct { X, Y int }`,
@@ -119,6 +133,8 @@ func TestDeclarationTypeRedefinition(t *testing.T) {
 // variable, producing a hydrated local variable that was never actually used -> Go
 // compilation failure ("declared and not used").
 func TestDeclarationStructFieldKeyDoesNotCollideWithPointerVariable(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type CityInfo struct { Name string }`,
 		`City := &CityInfo{Name: "Paris"}`,
@@ -140,6 +156,8 @@ func TestDeclarationStructFieldKeyDoesNotCollideWithPointerVariable(t *testing.T
 // so the generator emitted an export block referencing the variable outside of its scope
 // -> Go compilation failure ("undefined: total").
 func TestDeclarationNestedVarIsNotExported(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`sum := 0
 for i := 0; i < 5; i++ {

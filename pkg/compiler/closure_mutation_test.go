@@ -10,6 +10,8 @@ import "testing"
 // rewrite removes the local copy entirely -- both the closure and this cell's own statements
 // now read and write through the same shared pointer, so there's nothing to fall out of sync.
 func TestClosureMutationVisibleWithinSameCellAsCall(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`count := 0
 inc := func() { count++ }`,
@@ -32,6 +34,8 @@ result := count`,
 // Calling the closure multiple times across separate cells, each also reading the mutated
 // value back in the same cell it calls from -- the general case, not just a single call.
 func TestClosureMutationAccumulatesAcrossCells(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`count := 0
 inc := func() { count++ }`,

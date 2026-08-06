@@ -14,6 +14,8 @@ import "testing"
 // loses that mutation when called and read back within the same cell) -- that requires
 // the pointer-indirection rewrite in a later milestone.
 func TestPointerReassignmentPersistsAcrossCells(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Foo struct{ N int }
 foo := &Foo{N: 1}`,
@@ -37,6 +39,8 @@ foo := &Foo{N: 1}`,
 // worked before this milestone and must keep working -- this is the sibling behavior
 // that Milestone 2 must not regress.
 func TestPointerFieldMutationStillPersistsAcrossCells(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Foo struct{ N int }
 foo := &Foo{N: 1}`,

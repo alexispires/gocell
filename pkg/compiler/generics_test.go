@@ -5,6 +5,8 @@ import "testing"
 // Test a generic function, called both with type inference and with an explicit type
 // argument.
 func TestGenericFunction(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`func Max[T int | float64](a, b T) T {
 	if a > b {
@@ -30,6 +32,8 @@ func TestGenericFunction(t *testing.T) {
 
 // Test a generic type with generic methods, instantiated and mutated across cells.
 func TestGenericTypeWithMethods(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Stack[T any] struct {
 	items []T
@@ -61,6 +65,8 @@ func TestGenericTypeWithMethods(t *testing.T) {
 // at all, and a type argument position can never be a variable name in valid Go, since Go
 // itself forbids a type and a variable sharing an identifier in the same scope.
 func TestGenericTypeParamNameDoesNotCollideWithPointerGlobal(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Marker struct { N int }`,
 		`T := &Marker{N: 999}`, // pointer-typed global literally named "T"

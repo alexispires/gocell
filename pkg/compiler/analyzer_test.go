@@ -35,6 +35,8 @@ func analyzeCell(t *testing.T, code string, seed map[string]string) *compiler.An
 // of c (untyped int constant)". Resolving through go/types tells constants and variables
 // apart (*types.Const vs *types.Var), which name matching could not.
 func TestAnalyzeTopLevelConstIsNotExported(t *testing.T) {
+	t.Parallel()
+
 	res := analyzeCell(t, "const factor = 7\nscaled := factor * 6", nil)
 
 	for _, name := range res.NewVariables {
@@ -51,6 +53,8 @@ func TestAnalyzeTopLevelConstIsNotExported(t *testing.T) {
 // hydrated (not re-exported) and fresh exported. The redefinition rewrite deliberately leaves
 // this `:=` alone -- rewriting it to `=` would be a compile error, since fresh is new.
 func TestAnalyzeMixedRedeclarationReusesExistingSymbol(t *testing.T) {
+	t.Parallel()
+
 	res := analyzeCell(t, "x, fresh := 1, 2", map[string]string{"x": "*int"})
 
 	if _, used := res.UsedSymbols["x"]; !used {
@@ -69,6 +73,8 @@ func TestAnalyzeMixedRedeclarationReusesExistingSymbol(t *testing.T) {
 // must still resolve to the outer (candidate) symbol, and a reference after it must resolve to
 // the new inner one -- not the other way around, and not a resolution failure.
 func TestAnalyzeShadowResolvesCorrectlyDespiteCandidateFilePosition(t *testing.T) {
+	t.Parallel()
+
 	res := analyzeCell(t, `
 before := count
 if true {

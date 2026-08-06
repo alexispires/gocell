@@ -80,6 +80,8 @@ func rewriteForTest(t *testing.T, code string, seed map[string]string) string {
 // additionally compiled and run standalone (not just printed) to confirm it's not just
 // syntactically plausible but semantically correct Go.
 func TestRewriteUsedSymbolAccess(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		code string
@@ -117,6 +119,8 @@ func TestRewriteUsedSymbolAccess(t *testing.T) {
 // Registry symbol is a different object and its own occurrences are never rewritten -- while
 // occurrences of the real outer candidate, before and after the shadow, still are.
 func TestRewriteDoesNotTouchShadowedOccurrences(t *testing.T) {
+	t.Parallel()
+
 	code := `before := count
 if true {
 	count := "shadow"

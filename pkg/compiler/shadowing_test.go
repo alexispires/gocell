@@ -11,6 +11,8 @@ import "testing"
 // function, which fails to compile ("declared and not used").
 
 func TestShadowingRangeVariable(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Foo struct { N int }`,
 		`result := &Foo{N: 1}`,
@@ -31,6 +33,8 @@ for result := range xs {
 }
 
 func TestShadowingNestedShortVarDecl(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Foo struct { N int }`,
 		`foo := &Foo{N: 1}`,
@@ -51,6 +55,8 @@ for i := 0; i < 3; i++ {
 }
 
 func TestShadowingClosureParameter(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Foo struct { N int }`,
 		`result := &Foo{N: 1}`,
@@ -70,6 +76,8 @@ out := double(21)
 }
 
 func TestShadowingLabel(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Foo struct { N int }`,
 		`result := &Foo{N: 1}`,
@@ -97,6 +105,8 @@ result:
 // it, not at the top of the block) -- and the shadow's own mutations must never leak back
 // into the outer, hydrated value.
 func TestShadowingDoesNotApplyBeforeItsDeclaration(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`x := 100`,
 		`
@@ -129,6 +139,8 @@ if true {
 // mutating the outer symbol -- this is the mirror image of the shadowing tests above, and
 // matters most for pointer-typed symbols, which rely on it since they have no write-back.
 func TestNestedPlainAssignStillMutatesOuterPointer(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`type Foo struct { N int }`,
 		`foo := &Foo{N: 1}`,

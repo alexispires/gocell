@@ -11,6 +11,8 @@ import (
 
 // Test catching an explicit panic and resuming the session
 func TestResilienceExplicitPanic(t *testing.T) {
+	t.Parallel()
+
 	wsMgr, err := workspace.NewManager("")
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
@@ -69,6 +71,8 @@ func TestResilienceExplicitPanic(t *testing.T) {
 
 // Test catching a nil pointer dereference
 func TestResilienceNilPointerPanic(t *testing.T) {
+	t.Parallel()
+
 	wsMgr, err := workspace.NewManager("")
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)

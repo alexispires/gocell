@@ -60,6 +60,8 @@ func runNotebookSession(t *testing.T, cells []string) *runtime.Context {
 }
 
 func TestCompilerPipeline(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`import "fmt"; a := 42; fmt.Println("Cell 1 OK, a =", a)`,
 		`b := a + 8`,

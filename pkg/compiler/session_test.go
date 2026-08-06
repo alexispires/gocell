@@ -4,6 +4,8 @@ import "testing"
 
 // Test re-executing cells with := declarations (idempotence)
 func TestSessionCellReExecution(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`a := 2`,
 		`a := 2`, // Exact re-execution
@@ -20,6 +22,8 @@ func TestSessionCellReExecution(t *testing.T) {
 
 // Test variable persistence across cells
 func TestSessionVariablePersistence(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`a := 10`,
 		`b := a * 4`,
@@ -35,6 +39,8 @@ func TestSessionVariablePersistence(t *testing.T) {
 
 // Test variable mutations (=, +=, *= assignments)
 func TestSessionVariableMutation(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`count := 5`,
 		`count = count + 10`,
@@ -50,6 +56,8 @@ func TestSessionVariableMutation(t *testing.T) {
 
 // Test import retention and reuse
 func TestSessionImportAccumulation(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`import "math"`,
 		`res := math.Sqrt(16.0)`,
@@ -64,6 +72,8 @@ func TestSessionImportAccumulation(t *testing.T) {
 
 // Test closures capturing the environment via a pointer
 func TestSessionClosures(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`factor := 10; factorPtr := &factor; multiplier := func(x int) int { return x * *factorPtr }`,
 		`*factorPtr = 20`,
@@ -79,6 +89,8 @@ func TestSessionClosures(t *testing.T) {
 
 // Test persistence of channels and goroutines
 func TestSessionChannels(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`ch := make(chan string, 1)`,
 		`ch <- "hello gocell"`,
@@ -94,6 +106,8 @@ func TestSessionChannels(t *testing.T) {
 
 // Test multi-level pointers (***int)
 func TestSessionMultiPointers(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`val := 42; p1 := &val; p2 := &p1; p3 := &p2`,
 		`***p3 = 99`,
@@ -109,6 +123,8 @@ func TestSessionMultiPointers(t *testing.T) {
 
 // Test in-place mutation of maps and slices
 func TestSessionMapAndSliceMutation(t *testing.T) {
+	t.Parallel()
+
 	cells := []string{
 		`m := map[string]int{"alpha": 10}`,
 		`m["beta"] = 20`,

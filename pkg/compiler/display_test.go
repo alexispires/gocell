@@ -13,6 +13,8 @@ import (
 // nothing; a bare expression that would not compile as-is (bare identifier, compound
 // expression) must be captured and reported via ctx.TakeResult().
 func TestDisplayLastExpression(t *testing.T) {
+	t.Parallel()
+
 	wsMgr, err := workspace.NewManager("")
 	if err != nil {
 		t.Fatalf("Failed to create workspace: %v", err)
