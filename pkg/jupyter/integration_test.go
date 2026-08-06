@@ -159,6 +159,35 @@ func (k *zmqTestKernel) execute(t *testing.T, code string) *jupyter.Message {
 	return replyMsg
 }
 
+// complete sends a complete_request and returns the decoded complete_reply.
+func (k *zmqTestKernel) complete(t *testing.T, code string, cursorPos int) *jupyter.Message {
+	t.Helper()
+
+	reqContent, _ := json.Marshal(map[string]any{"code": code, "cursor_pos": cursorPos})
+	req := &jupyter.Message{
+		Identities:   [][]byte{[]byte("client-dealer")},
+		Header:       jupyter.NewHeader("complete_request", "session-1"),
+		ParentHeader: jupyter.Header{},
+		Metadata:     make(map[string]any),
+		Content:      reqContent,
+	}
+
+	zmsg, _ := jupyter.EncodeMessage(req, k.key)
+	if err := k.clientShell.Send(zmsg); err != nil {
+		t.Fatalf("Failed to send complete_request: %v", err)
+	}
+
+	replyZMsg, err := k.clientShell.Recv()
+	if err != nil {
+		t.Fatalf("Failed to receive complete_reply: %v", err)
+	}
+	replyMsg, err := jupyter.DecodeMessage(replyZMsg, k.key)
+	if err != nil {
+		t.Fatalf("Failed to decode complete_reply: %v", err)
+	}
+	return replyMsg
+}
+
 // recvIOPubUntil reads IOPub messages (with a short per-message timeout) until one matches
 // msgType, and fails the test if none arrives within the overall deadline.
 func (k *zmqTestKernel) recvIOPubUntil(t *testing.T, msgType string) *jupyter.Message {
@@ -350,5 +379,54 @@ func TestJupyterZMQPublishesErrorOnPanic(t *testing.T) {
 	}
 	if errContent.Ename == "" {
 		t.Fatalf("Expected a non-empty ename on the published error message")
+	}
+}
+
+// TestJupyterZMQCompleteRequest verifies a real complete_request/complete_reply round trip:
+// this is the message pair a client (JupyterLab, VS Code) sends on Tab, entirely unhandled
+// before this feature -- shell.go's dispatch switch only knew kernel_info_request,
+// execute_request, and is_complete_request (a different message, unrelated to suggestions).
+func TestJupyterZMQCompleteRequest(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	reply := k.execute(t, `countdown := 10`)
+	var execStatus struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(reply.Content, &execStatus)
+	if execStatus.Status != "ok" {
+		t.Fatalf("Expected execute_reply status 'ok', got %q", execStatus.Status)
+	}
+
+	code := "coun"
+	completeReply := k.complete(t, code, len(code))
+	if completeReply.Header.MsgType != "complete_reply" {
+		t.Fatalf("Expected message type 'complete_reply', got %q", completeReply.Header.MsgType)
+	}
+
+	var content struct {
+		Matches     []string `json:"matches"`
+		CursorStart int      `json:"cursor_start"`
+		CursorEnd   int      `json:"cursor_end"`
+		Status      string   `json:"status"`
+	}
+	if err := json.Unmarshal(completeReply.Content, &content); err != nil {
+		t.Fatalf("Failed to decode complete_reply content: %v", err)
+	}
+	if content.Status != "ok" {
+		t.Fatalf("Expected complete_reply status 'ok', got %q", content.Status)
+	}
+	if content.CursorStart != 0 || content.CursorEnd != len(code) {
+		t.Fatalf("Expected cursor range [0, %d), got [%d, %d)", len(code), content.CursorStart, content.CursorEnd)
+	}
+	found := false
+	for _, m := range content.Matches {
+		if m == "countdown" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("Expected 'countdown' among complete_reply matches, got %v", content.Matches)
 	}
 }

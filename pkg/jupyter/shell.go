@@ -77,6 +77,9 @@ func (s *Server) StartShellLoop(ctx context.Context, iopub *IOPubNotifier) error
 			case "is_complete_request":
 				s.handleIsCompleteRequest(socket, msg, key)
 
+			case "complete_request":
+				s.handleCompleteRequest(socket, msg, key)
+
 			default:
 				log.Printf("[Shell] Ignored message type: %s", msg.Header.MsgType)
 			}
@@ -120,6 +123,41 @@ func (s *Server) handleIsCompleteRequest(socket zmq4.Socket, msg *Message, key [
 	replyMsg := &Message{
 		Identities:   msg.Identities,
 		Header:       NewHeader("is_complete_reply", msg.Header.Session),
+		ParentHeader: msg.Header,
+		Metadata:     make(map[string]any),
+		Content:      content,
+	}
+
+	zreply, _ := EncodeMessage(replyMsg, key)
+	_ = socket.Send(zreply)
+}
+
+func (s *Server) handleCompleteRequest(socket zmq4.Socket, msg *Message, key []byte) {
+	var req struct {
+		Code      string `json:"code"`
+		CursorPos int    `json:"cursor_pos"`
+	}
+	if err := json.Unmarshal(msg.Content, &req); err != nil {
+		log.Printf("[Shell] complete_request unmarshal error: %v", err)
+		return
+	}
+
+	matches, start, end := s.sess.Complete(req.Code, req.CursorPos)
+	if matches == nil {
+		matches = []string{}
+	}
+
+	content, _ := json.Marshal(map[string]any{
+		"matches":      matches,
+		"cursor_start": start,
+		"cursor_end":   end,
+		"metadata":     map[string]any{},
+		"status":       "ok",
+	})
+
+	replyMsg := &Message{
+		Identities:   msg.Identities,
+		Header:       NewHeader("complete_reply", msg.Header.Session),
 		ParentHeader: msg.Header,
 		Metadata:     make(map[string]any),
 		Content:      content,
