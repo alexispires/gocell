@@ -56,7 +56,9 @@ called it. The linked examples are notebooks only because that's what's written 
 
 - **Goroutines that outlive a cell** — a `go func() { ... }()` started in one cell keeps
   running in the background, fed from and read from independent later cells
-  ([examples/live-goroutines.ipynb](examples/live-goroutines.ipynb)).
+  ([examples/live-goroutines.ipynb](examples/live-goroutines.ipynb)). A panic on one of these
+  is recovered and reported to stderr instead of taking the whole kernel down with it — Go's
+  own default for a panic on any goroutine but the main one.
 - **State persists with zero effort** — no serialization, no `%store`-style magic: a
   variable's memory address is identical from cell to cell, because cells share the kernel
   process's own heap ([examples/heavy-model.ipynb](examples/heavy-model.ipynb)).
@@ -143,6 +145,13 @@ type naturally.
   structural to `-buildmode=plugin`, not something build flags can reduce.
 - **No Windows support**, and the kernel and every cell plugin must share a Go toolchain
   version (handled automatically, see [pkg/compiler/builder.go](pkg/compiler/builder.go)).
+- **A background goroutine's output can bleed into an unrelated cell's captured stdout.**
+  Output capture redirects the underlying file descriptor for the duration of each cell
+  ([pkg/output/capturer.go](pkg/output/capturer.go)), so a still-running goroutine
+  ([examples/live-goroutines.ipynb](examples/live-goroutines.ipynb)) that prints while a later,
+  unrelated cell is capturing can have its output show up there instead of on the kernel's own
+  console. Structural to redirecting a single shared file descriptor, not a synchronization bug
+  — the print itself is never corrupted or lost, just possibly misattributed.
 - **A new cell's first run includes compile time.** Measured on an Apple M2: a fresh kernel
   process, started from scratch, up to and including its first `fmt.Println("hello world")`.
   Run twice back to back — the second run is faster only because Go's own on-disk build cache
