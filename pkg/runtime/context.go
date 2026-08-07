@@ -1,6 +1,16 @@
 package runtime
 
-import "unsafe"
+import (
+	"errors"
+	"sync/atomic"
+	"unsafe"
+)
+
+// ErrInterrupted is the error Err returns once Cancel has been called -- and the value every
+// injected interrupt check panics with (see pkg/compiler's injectInterruptChecks), since Go
+// has no way to forcibly stop a running goroutine: a loop can only be asked to notice and stop
+// itself.
+var ErrInterrupted = errors.New("interrupted")
 
 // Context is the object passed to the Execute(ctx) function of every plugin.
 type Context struct {
@@ -9,6 +19,8 @@ type Context struct {
 
 	resultText string
 	hasResult  bool
+
+	cancelled atomic.Bool
 }
 
 // NewContext initializes an execution Context.
@@ -17,6 +29,37 @@ func NewContext(reg *Registry, tr *TypeRegistry) *Context {
 		Registry: reg,
 		Types:    tr,
 	}
+}
+
+// Cancel flags the cell currently running against this Context as interrupted. Safe to call
+// from a different goroutine than the one executing the cell (e.g. the ZMQ Control loop
+// handling an interrupt_request while the Shell loop is blocked inside Execute).
+func (c *Context) Cancel() {
+	if c == nil {
+		return
+	}
+	c.cancelled.Store(true)
+}
+
+// Err returns ErrInterrupted if Cancel has been called since the last ResetCancel, nil
+// otherwise. Every injected loop check calls this.
+func (c *Context) Err() error {
+	if c == nil {
+		return nil
+	}
+	if c.cancelled.Load() {
+		return ErrInterrupted
+	}
+	return nil
+}
+
+// ResetCancel clears a previous interrupt before a new cell starts, so a resolved interrupt
+// from one cell can never bleed into the next.
+func (c *Context) ResetCancel() {
+	if c == nil {
+		return
+	}
+	c.cancelled.Store(false)
 }
 
 // SetResult records the textual representation of a cell's last expression,

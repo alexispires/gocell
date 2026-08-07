@@ -9,8 +9,9 @@ import (
 	"github.com/go-zeromq/zmq4"
 )
 
-// StartControlLoop starts the priority listener on the ZMQ Control channel.
-func StartControlLoop(ctx context.Context, conn *ConnectionInfo, iopub *IOPubNotifier, cancelFunc context.CancelFunc) error {
+// StartControlLoop starts the priority listener on the ZMQ Control channel. interrupt is
+// called synchronously on interrupt_request, before replying -- typically *Server.Interrupt.
+func StartControlLoop(ctx context.Context, conn *ConnectionInfo, iopub *IOPubNotifier, cancelFunc context.CancelFunc, interrupt func()) error {
 	addr := fmt.Sprintf("%s://%s:%d", conn.Transport, conn.IP, conn.ControlPort)
 	socket := zmq4.NewRouter(ctx)
 
@@ -75,6 +76,8 @@ func StartControlLoop(ctx context.Context, conn *ConnectionInfo, iopub *IOPubNot
 					return
 
 				case "interrupt_request":
+					interrupt()
+
 					replyMsg := &Message{
 						Identities:   msg.Identities,
 						Header:       NewHeader("interrupt_reply", msg.Header.Session),

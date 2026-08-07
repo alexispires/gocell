@@ -41,6 +41,13 @@ var exportVarTemplate = template.Must(template.New("exportVar").Parse(`	ptr_{{.}
 type LineMapping struct {
 	GeneratedLine int
 	OriginalLine  int
+
+	// InjectedAtOriginalLines holds the original (pre-injection) line, within this statement,
+	// of every loop injectInterruptChecks added a check to -- sorted ascending. Each one added
+	// exactly 3 generated lines that don't exist in the cell's own source, so
+	// remapPanicError's otherwise-uniform generated->original interpolation needs to subtract
+	// 3 for every entry at or before the line it's resolving.
+	InjectedAtOriginalLines []int
 }
 
 // GeneratePluginCode generates the complete Go source of a cell plugin for compilation, along
@@ -70,6 +77,12 @@ func GeneratePluginCode(
 
 	var bodySb strings.Builder
 
+	// __gocell_ctx makes the Context reachable from any function in this generated file,
+	// including ones the cell itself declared (re-injected into later cells as plain source
+	// text, with no ctx parameter of their own) -- injectInterruptChecks relies on this to
+	// place a working check inside a cell-declared function's loops, not just cell.Stmts'.
+	bodySb.WriteString("var __gocell_ctx *runtime.Context\n\n")
+
 	// Re-inject declarations. Sorted by key: map iteration order is randomized per run, and an
 	// unsorted range here would make byte-identical cell semantics hash differently between
 	// runs, defeating pkg/plugin.Cache with spurious misses.
@@ -96,6 +109,7 @@ func GeneratePluginCode(
 	const anchorComment = "// --- Plugin Execute entry point ---"
 	bodySb.WriteString(anchorComment + "\n")
 	bodySb.WriteString("func Execute(ctx *runtime.Context) error {\n")
+	bodySb.WriteString("\t__gocell_ctx = ctx\n")
 
 	if len(analysis.UsedSymbols) > 0 {
 		usedNames := make([]string, 0, len(analysis.UsedSymbols))
@@ -125,10 +139,19 @@ func GeneratePluginCode(
 		if cell.Fset != nil {
 			// stmt.Pos() is relative to the synthetic wrapper ParseCell parsed the cell's
 			// statements from (see stmtWrapperPreamble) -- undo that preamble's line count to
-			// get back to the line the user actually typed.
+			// get back to the line the user actually typed. Injected-interrupt-check lines
+			// (recorded in the same raw coordinate system by injectInterruptChecks) need the
+			// same adjustment to compare correctly against OriginalLine later.
+			var injectedLines []int
+			if i < len(analysis.InjectedInterruptLines) {
+				for _, l := range analysis.InjectedInterruptLines[i] {
+					injectedLines = append(injectedLines, l-stmtWrapperPreambleLines)
+				}
+			}
 			mappings = append(mappings, LineMapping{
-				GeneratedLine: relLine,
-				OriginalLine:  cell.Fset.Position(stmt.Pos()).Line - stmtWrapperPreambleLines,
+				GeneratedLine:           relLine,
+				OriginalLine:            cell.Fset.Position(stmt.Pos()).Line - stmtWrapperPreambleLines,
+				InjectedAtOriginalLines: injectedLines,
 			})
 		}
 

@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/alexispires/gocell/pkg/compiler"
@@ -30,6 +31,17 @@ func main() {
 	}
 
 	fmt.Println("gocell - standalone Go REPL (Ctrl+D to exit)")
+
+	// Ctrl-C interrupts the cell currently running (a stuck for{}), rather than killing the
+	// process -- matching how the kernel now handles SIGINT, and how a terminal-attached
+	// Jupyter client's own Ctrl-C behaves for other kernels.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	go func() {
+		for range sigChan {
+			sess.Interrupt()
+		}
+	}()
 
 	var buf strings.Builder
 

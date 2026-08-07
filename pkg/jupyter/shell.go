@@ -33,6 +33,13 @@ func NewServer(conn *ConnectionInfo, wsMgr *workspace.Manager) (*Server, error) 
 	}, nil
 }
 
+// Interrupt asks the cell currently running on the Shell loop (if any) to stop at its next
+// cooperative check. Safe to call from a different goroutine, e.g. the Control loop handling
+// an interrupt_request, or a SIGINT handler.
+func (s *Server) Interrupt() {
+	s.sess.Interrupt()
+}
+
 // StartShellLoop listens for and handles messages on the ZMQ Shell channel.
 func (s *Server) StartShellLoop(ctx context.Context, iopub *IOPubNotifier) error {
 	addr := fmt.Sprintf("%s://%s:%d", s.conn.Transport, s.conn.IP, s.conn.ShellPort)

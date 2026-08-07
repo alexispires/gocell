@@ -60,7 +60,7 @@ called it. The linked examples are notebooks only because that's what's written 
 - **State persists with zero effort** — no serialization, no `%store`-style magic: a
   variable's memory address is identical from cell to cell, because cells share the kernel
   process's own heap ([examples/heavy-model.ipynb](examples/heavy-model.ipynb)).
-- **Real generics** — type parameters work both within a cell and across cells, the same as
+- **Generics support** — type parameters work both within a cell and across cells, the same as
   any other type or function declaration
   ([examples/generics.ipynb](examples/generics.ipynb)).
 - **Real compiled speed** — every cell compiles to native code via `-buildmode=plugin`,
@@ -77,6 +77,8 @@ called it. The linked examples are notebooks only because that's what's written 
   live state and goroutines in one process.
 - **Auto-import** — a cell can use `math.Sqrt(...)` with no `import "math"` line at all and it
   just compiles: every cell is run through real `goimports` before building, not just gofmt.
+- **Interruptible loops** — Ctrl-C, SIGINT, or Jupyter's "Interrupt" button stops a stuck
+  `for`/`range` loop without restarting the kernel. Background goroutines are left untouched.
 - **Go 1.25+** — builds and runs against current Go toolchains.
 
 A couple of smaller, still-genuine conveniences:

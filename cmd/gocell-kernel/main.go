@@ -35,12 +35,24 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle SIGINT / SIGTERM system signals
+	server, err := jupyter.NewServer(conn, wsMgr)
+	if err != nil {
+		log.Fatalf("Failed to initialize gocell server: %v", err)
+	}
+
+	// SIGINT interrupts the cell currently running on the Shell loop (matching how a
+	// terminal-attached Jupyter client's Ctrl-C behaves for other kernels); SIGTERM is a real
+	// shutdown.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		<-sigChan
-		cancel()
+		for sig := range sigChan {
+			if sig == syscall.SIGTERM {
+				cancel()
+				return
+			}
+			server.Interrupt()
+		}
 	}()
 
 	// 1. Start IOPub
@@ -59,16 +71,11 @@ func main() {
 	}
 
 	// 3. Start Control Loop
-	if err := jupyter.StartControlLoop(ctx, conn, iopub, cancel); err != nil {
+	if err := jupyter.StartControlLoop(ctx, conn, iopub, cancel, server.Interrupt); err != nil {
 		log.Fatalf("Failed to start Control loop: %v", err)
 	}
 
 	// 4. Start Shell Loop
-	server, err := jupyter.NewServer(conn, wsMgr)
-	if err != nil {
-		log.Fatalf("Failed to initialize gocell server: %v", err)
-	}
-
 	log.Printf("gocell Kernel started successfully. Listening on Shell channel %s:%d...", conn.IP, conn.ShellPort)
 
 	if err := server.StartShellLoop(ctx, iopub); err != nil {

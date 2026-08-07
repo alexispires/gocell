@@ -19,6 +19,12 @@ import (
 type AnalysisResult struct {
 	UsedSymbols  map[string]*runtime.Symbol
 	NewVariables []string
+
+	// InjectedInterruptLines[i] holds the original line (within cell.Fset) of every loop in
+	// cell.Stmts[i] that injectInterruptChecks added a cooperative interrupt check to, sorted
+	// ascending. GeneratePluginCode copies this into the matching LineMapping entry so
+	// remapPanicError can correct for the extra generated lines.
+	InjectedInterruptLines [][]int
 }
 
 // analysisFuncName wraps the cell's statements in the throwaway source handed to go/types.
@@ -49,7 +55,17 @@ func AnalyzeCell(cell *CellContent, reg *runtime.Registry, importTracker *Import
 	// Must run before type-checking: it changes how the cell's own statements resolve.
 	rewriteTopLevelRedefinitions(cell, existing)
 
-	return analyzeWithTypeChecker(cell, existing, importTracker, typeRegistry)
+	result, err := analyzeWithTypeChecker(cell, existing, importTracker, typeRegistry)
+	if err != nil {
+		return nil, err
+	}
+
+	// A pure syntax pass, deliberately run after type-checking completes: the injected checks
+	// reference a synthetic __gocell_ctx that has no place in go/types' understanding of the
+	// cell, and mutating cell.Stmts/cell.FuncDecls before analysis would risk polluting it.
+	result.InjectedInterruptLines = injectInterruptChecks(cell)
+
+	return result, nil
 }
 
 // rewriteTopLevelRedefinitions turns a top-level `:=` into `=` when every name on its left

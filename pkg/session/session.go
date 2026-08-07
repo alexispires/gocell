@@ -57,9 +57,19 @@ type Result struct {
 	HasDisplay  bool
 }
 
+// Interrupt asks the currently running cell (if any) to stop at its next cooperative check --
+// see pkg/compiler's injectInterruptChecks. Safe to call from a different goroutine than the
+// one calling Execute.
+func (s *Session) Interrupt() {
+	s.ctx.Cancel()
+}
+
 // Execute parses, compiles (or reuses a cached build of) and runs one cell of Go code
 // against the session's shared state.
 func (s *Session) Execute(code string) (Result, error) {
+	// A previous cell's interrupt must never bleed into this one.
+	s.ctx.ResetCancel()
+
 	cell, err := compiler.ParseCell(code)
 	if err != nil {
 		return Result{}, err
@@ -118,6 +128,16 @@ func remapPanicError(err error, mappings []compiler.LineMapping) error {
 		return err
 	}
 
+	// An interrupt is reported as a panic (see pkg/compiler's injectInterruptChecks) so it can
+	// reuse this same recover() machinery, but it isn't a bug at a line the way a real panic
+	// is -- and for a loop with no other body content (a bare `for {}`), the panic call is
+	// literally the only thing in the loop's body, landing on the injected check's own
+	// synthetic line, which has no original-cell-line equivalent to remap to at all. Report it
+	// cleanly instead of attempting a line number that would be meaningless at best.
+	if panicVal, ok := panicErr.Value.(error); ok && errors.Is(panicVal, runtime.ErrInterrupted) {
+		return runtime.ErrInterrupted
+	}
+
 	var best *compiler.LineMapping
 	for i := range mappings {
 		m := &mappings[i]
@@ -129,6 +149,25 @@ func remapPanicError(err error, mappings []compiler.LineMapping) error {
 		return err
 	}
 
-	originalLine := best.OriginalLine + (panicErr.GeneratedLine - best.GeneratedLine)
+	// Each injected interrupt check (pkg/compiler's injectInterruptChecks) added exactly 3
+	// generated lines that don't exist in the cell's own source, for every loop at or before
+	// the panic within this statement -- correcting for that needs each injection's own
+	// generated-space position (not a fixed-point correction on the original-line estimate,
+	// which oscillates right at an injection's boundary): InjectedAtOriginalLines is sorted,
+	// so the i-th injection sits 3*i generated lines further along than a naive delta from
+	// OriginalLine would suggest, since i earlier injections already pushed it down.
+	// Known imprecision, not fixed here: a panic literally on a for-loop's own header line
+	// (its init/cond, e.g. an out-of-bounds index checked on the first iteration) is
+	// indistinguishable from one on the first line of that same loop's body, and gets the
+	// correction applied when it shouldn't -- narrow edge case, off by exactly 3 when it hits.
+	injectedBefore := 0
+	for i, origLine := range best.InjectedAtOriginalLines {
+		injectionGeneratedLine := best.GeneratedLine + (origLine - best.OriginalLine) + 3*i
+		if injectionGeneratedLine <= panicErr.GeneratedLine {
+			injectedBefore = i + 1
+		}
+	}
+
+	originalLine := best.OriginalLine + (panicErr.GeneratedLine - best.GeneratedLine) - 3*injectedBefore
 	return fmt.Errorf("panic in cell, line %d: %v", originalLine, panicErr.Value)
 }

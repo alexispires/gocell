@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alexispires/gocell/pkg/workspace"
 )
@@ -112,5 +113,150 @@ func TestExecutePanicReportsOriginalCellLine(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "line 4") {
 		t.Fatalf("Expected the error to report the cell's own line 4 (where '_ = *p' is), got: %v", err)
+	}
+}
+
+// Regression test for a real (non-interrupt) panic occurring after an injected interrupt
+// check within the same loop: the injected check adds 3 generated lines that don't exist in
+// the cell's own source, and without remapPanicError's correction for that, this would
+// silently report line 7 instead of line 4.
+func TestExecutePanicAfterAnInjectedInterruptCheckReportsCorrectLine(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	code := "for i := 0; i < 3; i++ {\n\tif i == 2 {\n\t\tvar p *int\n\t\t_ = *p\n\t}\n}"
+	_, err = sess.Execute(code)
+	if err == nil {
+		t.Fatalf("Expected the nil dereference to be caught as an error")
+	}
+	if !strings.Contains(err.Error(), "line 4") {
+		t.Fatalf("Expected the error to report the cell's own line 4 (where '_ = *p' is), got: %v", err)
+	}
+}
+
+// TestExecuteInterruptStopsAnInfiniteLoop is the core proof that Interrupt() actually works:
+// a `for {}` pasted directly into a cell used to brick the kernel forever (see the backlog --
+// both existing "interrupt" code paths were confirmed non-functional no-ops before this).
+func TestExecuteInterruptStopsAnInfiniteLoop(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, execErr := sess.Execute("for {\n}")
+		errCh <- execErr
+	}()
+
+	time.Sleep(200 * time.Millisecond) // give the loop time to actually start spinning
+	sess.Interrupt()
+
+	select {
+	case execErr := <-errCh:
+		if execErr == nil || !strings.Contains(execErr.Error(), "interrupted") {
+			t.Fatalf("Expected an 'interrupted' error, got: %v", execErr)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Execute did not return after Interrupt() -- the injected check isn't working")
+	}
+}
+
+// Same proof, but the infinite loop lives inside a function the cell itself declared and a
+// later cell calls -- the harder half of "the most robust solution" the user asked for, since
+// a declared function has no ctx parameter of its own to check (see injectInterruptChecks).
+func TestExecuteInterruptStopsAnInfiniteLoopInsideADeclaredFunction(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	if _, err := sess.Execute("func slow() {\n\tfor {\n\t}\n}"); err != nil {
+		t.Fatalf("Failed to declare slow: %v", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, execErr := sess.Execute("slow()")
+		errCh <- execErr
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	sess.Interrupt()
+
+	select {
+	case execErr := <-errCh:
+		if execErr == nil || !strings.Contains(execErr.Error(), "interrupted") {
+			t.Fatalf("Expected an 'interrupted' error, got: %v", execErr)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Execute did not return after Interrupt() -- the declared-function case isn't working")
+	}
+}
+
+// Negative case: a background goroutine (examples/live-goroutines.ipynb's own pattern) has no
+// injected check at all -- injectInterruptChecks deliberately stops at any *ast.FuncLit -- so
+// an interrupt aimed at some later, unrelated stuck cell must never reach it.
+func TestInterruptDoesNotAffectABackgroundGoroutine(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	code := `jobs := make(chan int, 1)
+results := make(chan int, 1)
+go func() {
+	for {
+		n := <-jobs
+		results <- n * 2
+	}
+}()`
+	if _, err := sess.Execute(code); err != nil {
+		t.Fatalf("Failed to start background goroutine: %v", err)
+	}
+
+	// Aimed at some later, unrelated stuck cell -- must not reach the goroutine above, which
+	// has no injected check to ever see it.
+	sess.Interrupt()
+
+	if _, err := sess.Execute(`jobs <- 21`); err != nil {
+		t.Fatalf("Failed to submit a job: %v", err)
+	}
+
+	res, err := sess.Execute(`n := <-results`)
+	if err != nil {
+		t.Fatalf("Expected the background goroutine to still be alive and respond: %v", err)
+	}
+	_ = res
+
+	ptrN := sess.ctx.GetPointer("n")
+	if ptrN == nil || *(*int)(ptrN) != 42 {
+		t.Fatalf("Expected n = 42 from the still-alive background goroutine")
 	}
 }

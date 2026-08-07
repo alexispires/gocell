@@ -44,9 +44,10 @@ func getFreePorts(count int) ([]int, error) {
 // wired the same way TestJupyterZMQIntegration sets one up -- factored out so a second test
 // can also inspect IOPub content without duplicating the ~60 lines of socket plumbing.
 type zmqTestKernel struct {
-	clientShell zmq4.Socket
-	iopubSub    zmq4.Socket
-	key         []byte
+	clientShell   zmq4.Socket
+	clientControl zmq4.Socket
+	iopubSub      zmq4.Socket
+	key           []byte
 }
 
 func newZMQTestKernel(t *testing.T) *zmqTestKernel {
@@ -95,13 +96,13 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 	if err := jupyter.StartHeartbeat(ctx, conn); err != nil {
 		t.Fatalf("Heartbeat failed: %v", err)
 	}
-	if err := jupyter.StartControlLoop(ctx, conn, iopub, cancel); err != nil {
-		t.Fatalf("Control failed: %v", err)
-	}
 
 	server, err := jupyter.NewServer(conn, wsMgr)
 	if err != nil {
 		t.Fatalf("NewServer failed: %v", err)
+	}
+	if err := jupyter.StartControlLoop(ctx, conn, iopub, cancel, server.Interrupt); err != nil {
+		t.Fatalf("Control failed: %v", err)
 	}
 	go func() { _ = server.StartShellLoop(ctx, iopub) }()
 
@@ -111,6 +112,13 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 		t.Fatalf("Failed to connect Shell client: %v", err)
 	}
 	t.Cleanup(func() { _ = clientShell.Close() })
+
+	controlAddr := fmt.Sprintf("%s://%s:%d", conn.Transport, conn.IP, conn.ControlPort)
+	clientControl := zmq4.NewDealer(ctx)
+	if err := clientControl.Dial(controlAddr); err != nil {
+		t.Fatalf("Failed to connect Control client: %v", err)
+	}
+	t.Cleanup(func() { _ = clientControl.Close() })
 
 	// A second fake client subscribed to IOPub, the channel that carries stream/error/
 	// execute_result content -- the shell reply alone only carries the execute_reply status.
@@ -127,11 +135,25 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 	// a PUB socket drops messages published before a SUB has finished subscribing.
 	time.Sleep(200 * time.Millisecond)
 
-	return &zmqTestKernel{clientShell: clientShell, iopubSub: iopubSub, key: []byte(conn.Key)}
+	return &zmqTestKernel{
+		clientShell:   clientShell,
+		clientControl: clientControl,
+		iopubSub:      iopubSub,
+		key:           []byte(conn.Key),
+	}
 }
 
 // execute sends an execute_request and returns the decoded execute_reply.
 func (k *zmqTestKernel) execute(t *testing.T, code string) *jupyter.Message {
+	t.Helper()
+	k.sendExecute(t, code)
+	return k.recvExecuteReply(t)
+}
+
+// sendExecute sends an execute_request without waiting for the reply -- for a cell expected
+// to hang until interrupted, execute (send-then-immediately-block-on-Recv) would itself block
+// forever.
+func (k *zmqTestKernel) sendExecute(t *testing.T, code string) {
 	t.Helper()
 
 	execReqContent, _ := json.Marshal(map[string]string{"code": code})
@@ -147,6 +169,11 @@ func (k *zmqTestKernel) execute(t *testing.T, code string) *jupyter.Message {
 	if err := k.clientShell.Send(zmsg); err != nil {
 		t.Fatalf("Failed to send execute_request: %v", err)
 	}
+}
+
+// recvExecuteReply blocks for the execute_reply to a previously sent execute_request.
+func (k *zmqTestKernel) recvExecuteReply(t *testing.T) *jupyter.Message {
+	t.Helper()
 
 	replyZMsg, err := k.clientShell.Recv()
 	if err != nil {
@@ -213,6 +240,35 @@ func (k *zmqTestKernel) isComplete(t *testing.T, code string) *jupyter.Message {
 	replyMsg, err := jupyter.DecodeMessage(replyZMsg, k.key)
 	if err != nil {
 		t.Fatalf("Failed to decode is_complete_reply: %v", err)
+	}
+	return replyMsg
+}
+
+// interrupt sends an interrupt_request on the Control channel and returns the decoded
+// interrupt_reply -- the actual delivery path a Jupyter client's "Interrupt" button uses.
+func (k *zmqTestKernel) interrupt(t *testing.T) *jupyter.Message {
+	t.Helper()
+
+	req := &jupyter.Message{
+		Identities:   [][]byte{[]byte("client-dealer")},
+		Header:       jupyter.NewHeader("interrupt_request", "session-1"),
+		ParentHeader: jupyter.Header{},
+		Metadata:     make(map[string]any),
+		Content:      json.RawMessage("{}"),
+	}
+
+	zmsg, _ := jupyter.EncodeMessage(req, k.key)
+	if err := k.clientControl.Send(zmsg); err != nil {
+		t.Fatalf("Failed to send interrupt_request: %v", err)
+	}
+
+	replyZMsg, err := k.clientControl.Recv()
+	if err != nil {
+		t.Fatalf("Failed to receive interrupt_reply: %v", err)
+	}
+	replyMsg, err := jupyter.DecodeMessage(replyZMsg, k.key)
+	if err != nil {
+		t.Fatalf("Failed to decode interrupt_reply: %v", err)
 	}
 	return replyMsg
 }
@@ -530,5 +586,33 @@ func TestJupyterZMQIsCompleteRequest(t *testing.T) {
 				t.Fatalf("Expected status %q for %q, got %q", c.want, c.code, content.Status)
 			}
 		})
+	}
+}
+
+// TestJupyterZMQInterruptStopsAHangingCell is the real end-to-end proof for the delivery path
+// the backlog identified as non-functional: interrupt_request on Control was previously a
+// no-op that replied without touching the stuck cell. Sends a hanging execute_request on
+// Shell (which blocks that loop entirely), then interrupt_request on Control -- handled
+// concurrently, since StartControlLoop runs its own goroutine independent of Shell's -- and
+// confirms the execute_reply eventually arrives with status "error" instead of hanging
+// forever.
+func TestJupyterZMQInterruptStopsAHangingCell(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	k.sendExecute(t, "for {\n}")
+	time.Sleep(300 * time.Millisecond) // let the loop actually start spinning on Shell
+
+	interruptReply := k.interrupt(t)
+	if interruptReply.Header.MsgType != "interrupt_reply" {
+		t.Fatalf("Expected message type 'interrupt_reply', got %q", interruptReply.Header.MsgType)
+	}
+
+	execReply := k.recvExecuteReply(t)
+	var status struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(execReply.Content, &status)
+	if status.Status != "error" {
+		t.Fatalf("Expected execute_reply status 'error' after interrupt, got %q", status.Status)
 	}
 }
