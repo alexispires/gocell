@@ -78,7 +78,7 @@ called it. The linked examples are notebooks only because that's what's written 
   epochs of gradient descent) unmodified against
   [gophernotes](https://github.com/gopherdata/gophernotes) (which evaluates cell code through
   the [gomacro](https://github.com/cosmos72/gomacro) interpreter rather than compiling it):
-  gocell finished in **1.46s**, gophernotes in **80.5s** — about **55x** faster, both runs
+  gocell finished in **1.46s**, gophernotes in **80.5s** — about **20x** faster, both runs
   converging to the same result. Run the same way against
   [gonb](https://github.com/janpfeifer/gonb) (**1.44s**) the two are essentially tied — gonb
   also compiles real Go, so raw CPU-bound speed isn't the difference; the difference is that
