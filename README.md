@@ -14,8 +14,12 @@ a real Go plugin (`-buildmode=plugin`) loaded into one long-lived process. Sessi
 variables, goroutines, open connections — persists in memory across cells: no interpreter, no
 re-execution, cells share the same Go heap.
 
-<img src="assets/repl-demo.gif" alt="gocell-repl starting up" width="600">
-<img src="assets/goroutine-demo.gif" alt="a background goroutine mutating a live variable across cells" width="600">
+<table>
+<tr>
+<td><img src="assets/repl-demo.gif" alt="gocell-repl starting up" width="420"></td>
+<td><img src="assets/goroutine-demo.gif" alt="a background goroutine mutating a live variable across cells" width="420"></td>
+</tr>
+</table>
 
 ## Architecture
 
