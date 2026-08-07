@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/printer"
 	"go/token"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -69,12 +70,20 @@ func GeneratePluginCode(
 
 	var bodySb strings.Builder
 
-	// Re-inject declarations
+	// Re-inject declarations. Sorted by key: map iteration order is randomized per run, and an
+	// unsorted range here would make byte-identical cell semantics hash differently between
+	// runs, defeating pkg/plugin.Cache with spurious misses.
 	registeredDecls := typeRegistry.AllTypes()
 	if len(registeredDecls) > 0 {
+		declKeys := make([]string, 0, len(registeredDecls))
+		for k := range registeredDecls {
+			declKeys = append(declKeys, k)
+		}
+		sort.Strings(declKeys)
+
 		bodySb.WriteString("// --- Re-injected declarations (types, functions, methods) ---\n")
-		for _, declCode := range registeredDecls {
-			bodySb.WriteString(declCode)
+		for _, k := range declKeys {
+			bodySb.WriteString(registeredDecls[k])
 			bodySb.WriteString("\n\n")
 		}
 	}
@@ -89,9 +98,15 @@ func GeneratePluginCode(
 	bodySb.WriteString("func Execute(ctx *runtime.Context) error {\n")
 
 	if len(analysis.UsedSymbols) > 0 {
+		usedNames := make([]string, 0, len(analysis.UsedSymbols))
+		for name := range analysis.UsedSymbols {
+			usedNames = append(usedNames, name)
+		}
+		sort.Strings(usedNames)
+
 		bodySb.WriteString("\t// Point directly at existing symbols -- no copy, no write-back\n")
-		for name, sym := range analysis.UsedSymbols {
-			cleanTypeName := registrySymbolType(sym)
+		for _, name := range usedNames {
+			cleanTypeName := registrySymbolType(analysis.UsedSymbols[name])
 			fmt.Fprintf(&bodySb, "\t%s_ptr := (*%s)(ctx.GetPointer(%q))\n", name, cleanTypeName, name)
 		}
 		bodySb.WriteString("\n")
