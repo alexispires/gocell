@@ -93,6 +93,8 @@ called it. The linked examples are notebooks only because that's what's written 
   `gonb/cache`, the gap nearly closes, but gocell still comes out ahead with zero extra code.
 - **Auto-import** — a cell can use `math.Sqrt(...)` with no `import "math"` line at all and it
   just compiles: every cell is run through real `goimports` before building, not just gofmt.
+  Third-party packages resolve the same way, via a plain `go build` — set `GOPROXY` in the
+  environment to control or restrict that.
 - **Interruptible loops** — Ctrl-C, SIGINT, or Jupyter's "Interrupt" button stops a stuck
   `for`/`range` loop without restarting the kernel. Background goroutines are left untouched.
 - **Go 1.25+** — builds and runs against current Go toolchains.
