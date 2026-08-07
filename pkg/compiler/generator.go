@@ -110,6 +110,8 @@ func GeneratePluginCode(
 	bodySb.WriteString(anchorComment + "\n")
 	bodySb.WriteString("func Execute(ctx *runtime.Context) error {\n")
 	bodySb.WriteString("\t__gocell_ctx = ctx\n")
+	bodySb.WriteString("\t_ctx := ctx.StdContext()\n")
+	bodySb.WriteString("\t_ = _ctx // available to the cell even if this cell doesn't reference it\n")
 
 	if len(analysis.UsedSymbols) > 0 {
 		usedNames := make([]string, 0, len(analysis.UsedSymbols))

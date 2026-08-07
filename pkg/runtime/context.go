@@ -1,8 +1,8 @@
 package runtime
 
 import (
+	"context"
 	"errors"
-	"sync/atomic"
 	"unsafe"
 )
 
@@ -20,15 +20,18 @@ type Context struct {
 	resultText string
 	hasResult  bool
 
-	cancelled atomic.Bool
+	stdCtx   context.Context
+	cancelFn context.CancelFunc
 }
 
 // NewContext initializes an execution Context.
 func NewContext(reg *Registry, tr *TypeRegistry) *Context {
-	return &Context{
+	c := &Context{
 		Registry: reg,
 		Types:    tr,
 	}
+	c.stdCtx, c.cancelFn = context.WithCancel(context.Background())
+	return c
 }
 
 // Cancel flags the cell currently running against this Context as interrupted. Safe to call
@@ -38,19 +41,16 @@ func (c *Context) Cancel() {
 	if c == nil {
 		return
 	}
-	c.cancelled.Store(true)
+	c.cancelFn()
 }
 
 // Err returns ErrInterrupted if Cancel has been called since the last ResetCancel, nil
 // otherwise. Every injected loop check calls this.
 func (c *Context) Err() error {
-	if c == nil {
+	if c == nil || c.stdCtx.Err() == nil {
 		return nil
 	}
-	if c.cancelled.Load() {
-		return ErrInterrupted
-	}
-	return nil
+	return ErrInterrupted
 }
 
 // ResetCancel clears a previous interrupt before a new cell starts, so a resolved interrupt
@@ -59,7 +59,21 @@ func (c *Context) ResetCancel() {
 	if c == nil {
 		return
 	}
-	c.cancelled.Store(false)
+	c.cancelFn() // release the outgoing context's resources before replacing it
+	c.stdCtx, c.cancelFn = context.WithCancel(context.Background())
+}
+
+// StdContext returns a standard context.Context, cancelled the moment Cancel is called. Every
+// generated Execute() declares it as the cell-local `_ctx`, so user code can hand it to any
+// idiomatic Go API that accepts one (net/http, os/exec, database/sql, a raw `select` on
+// Done()) -- reaching blocking calls the AST-injected loop checks cannot: those only ever run
+// between iterations of a `for` loop in the cell's own code, never inside a call Go has already
+// descended into.
+func (c *Context) StdContext() context.Context {
+	if c == nil {
+		return context.Background()
+	}
+	return c.stdCtx
 }
 
 // SetResult records the textual representation of a cell's last expression,
