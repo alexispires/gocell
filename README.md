@@ -1,4 +1,4 @@
-<img src="logo.png" alt="gocell logo" width="220" align="right">
+<img src="assets/logo.png" alt="gocell logo" width="220" align="right">
 
 # gocell
 
@@ -13,6 +13,9 @@ Run Go interactively — as a Jupyter kernel or a standalone REPL — by compili
 a real Go plugin (`-buildmode=plugin`) loaded into one long-lived process. Session state —
 variables, goroutines, open connections — persists in memory across cells: no interpreter, no
 re-execution, cells share the same Go heap.
+
+<img src="assets/repl-demo.gif" alt="gocell-repl starting up" width="600">
+<img src="assets/goroutine-demo.gif" alt="a background goroutine mutating a live variable across cells" width="600">
 
 ## Architecture
 
