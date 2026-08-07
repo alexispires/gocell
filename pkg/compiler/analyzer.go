@@ -64,6 +64,7 @@ func AnalyzeCell(cell *CellContent, reg *runtime.Registry, importTracker *Import
 	// reference a synthetic __gocell_ctx that has no place in go/types' understanding of the
 	// cell, and mutating cell.Stmts/cell.FuncDecls before analysis would risk polluting it.
 	result.InjectedInterruptLines = injectInterruptChecks(cell)
+	injectGoroutinePanicRecovery(cell)
 
 	return result, nil
 }

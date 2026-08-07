@@ -260,3 +260,59 @@ go func() {
 		t.Fatalf("Expected n = 42 from the still-alive background goroutine")
 	}
 }
+
+// A panic on any goroutine other than the one running Execute is, by Go's own default
+// behavior, fatal to the whole process -- unlike a normal cell error, which pkg/plugin/loader.go
+// already recovers around Execute itself. Proof this doesn't apply here: if the injected
+// recover (pkg/compiler's injectGoroutinePanicRecovery) weren't working, this whole test binary
+// would crash, not report a clean test failure -- there is no way to catch a real process crash
+// from within the same process, so this test's realistic pass/fail signal is the actual pass:
+// the test process reaching its later assertions at all.
+func TestGoroutinePanicDoesNotCrashTheSession(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	code := "go func() {\n\tvar p *int\n\t_ = *p\n}()"
+	if _, err := sess.Execute(code); err != nil {
+		t.Fatalf("Starting the goroutine should not itself error: %v", err)
+	}
+
+	time.Sleep(200 * time.Millisecond) // give the goroutine time to actually run and panic
+
+	res, err := sess.Execute(`fmt.Println("still alive")`)
+	if err != nil {
+		t.Fatalf("Expected the session to still be usable after a background goroutine panicked: %v", err)
+	}
+	if !strings.Contains(res.Stdout, "still alive") {
+		t.Fatalf("Expected stdout to contain 'still alive', got %q", res.Stdout)
+	}
+}
+
+// Negative case for the same fix: a panic on the goroutine actually running Execute (i.e. a
+// normal, synchronous cell panic, not one on a goroutine the cell itself started) must still
+// be reported as a cell error, not silently swallowed -- injectGoroutinePanicRecovery only
+// wraps `go func(){...}()` literals, never Execute's own call frame.
+func TestSynchronousPanicIsStillReportedNotSwallowed(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	if _, err := sess.Execute("var p *int\n_ = *p"); err == nil {
+		t.Fatalf("Expected a synchronous panic to still be reported as a cell error")
+	}
+}
