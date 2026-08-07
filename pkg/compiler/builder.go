@@ -26,6 +26,13 @@ func (b *Builder) ModuleRoot() string {
 	return b.moduleRoot
 }
 
+// GoVersion returns the Go toolchain version every cell plugin is built with -- the same one
+// read from the host module's go.mod at NewBuilder time (see detectGoVersion), so callers
+// reporting the kernel's language version don't need to duplicate that detection themselves.
+func (b *Builder) GoVersion() string {
+	return b.goVersion
+}
+
 func isGocellModule(dir string) bool {
 	if dir == "" {
 		return false

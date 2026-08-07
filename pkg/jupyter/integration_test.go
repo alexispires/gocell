@@ -331,10 +331,19 @@ func TestJupyterZMQIntegration(t *testing.T) {
 
 	var infoContent struct {
 		Implementation string `json:"implementation"`
+		LanguageInfo   struct {
+			Version string `json:"version"`
+		} `json:"language_info"`
 	}
 	_ = json.Unmarshal(replyMsg.Content, &infoContent)
 	if infoContent.Implementation != "gocell" {
 		t.Fatalf("Expected implementation 'gocell', got '%s'", infoContent.Implementation)
+	}
+	// Regression guard: language_info.version used to be hardcoded to a stale "1.22", drifting
+	// from go.mod's own declared version (see pkg/compiler.Builder.GoVersion). It must at least
+	// report a real, non-empty version now -- not the literal old hardcoded string.
+	if infoContent.LanguageInfo.Version == "" || infoContent.LanguageInfo.Version == "1.22" {
+		t.Fatalf("Expected a real, non-hardcoded Go version, got %q", infoContent.LanguageInfo.Version)
 	}
 
 	// --- Step 2: execute_request (Cell 1: x := 100) ---

@@ -107,7 +107,7 @@ func (s *Server) handleKernelInfoRequest(socket zmq4.Socket, msg *Message, key [
 		"implementation_version": "0.1.0",
 		"language_info": map[string]any{
 			"name":           "go",
-			"version":        "1.22",
+			"version":        s.sess.GoVersion(),
 			"mimetype":       "text/x-gosrc",
 			"file_extension": ".go",
 		},

@@ -64,6 +64,11 @@ func (s *Session) Interrupt() {
 	s.ctx.Cancel()
 }
 
+// GoVersion returns the Go toolchain version this session's cells are actually compiled with.
+func (s *Session) GoVersion() string {
+	return s.builder.GoVersion()
+}
+
 // Execute parses, compiles (or reuses a cached build of) and runs one cell of Go code
 // against the session's shared state.
 func (s *Session) Execute(code string) (Result, error) {
