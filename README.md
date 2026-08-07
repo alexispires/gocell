@@ -1,6 +1,6 @@
-# gocell
+<img src="logo.png" alt="gocell logo" width="220" align="right">
 
-<img src="logo.png" alt="gocell logo" width="220">
+# gocell
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/alexispires/gocell.svg)](https://pkg.go.dev/github.com/alexispires/gocell)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](LICENSE)
