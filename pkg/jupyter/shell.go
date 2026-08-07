@@ -65,7 +65,9 @@ func (s *Server) StartShellLoop(ctx context.Context, iopub *IOPubNotifier) error
 				continue
 			}
 
-			_ = iopub.SendStatus(msg.Header, "busy")
+			if err := iopub.SendStatus(msg.Header, "busy"); err != nil {
+				log.Printf("[Shell] SendStatus(busy) error: %v", err)
+			}
 
 			switch msg.Header.MsgType {
 			case "kernel_info_request":
@@ -84,7 +86,9 @@ func (s *Server) StartShellLoop(ctx context.Context, iopub *IOPubNotifier) error
 				log.Printf("[Shell] Ignored message type: %s", msg.Header.MsgType)
 			}
 
-			_ = iopub.SendStatus(msg.Header, "idle")
+			if err := iopub.SendStatus(msg.Header, "idle"); err != nil {
+				log.Printf("[Shell] SendStatus(idle) error: %v", err)
+			}
 		}
 	}
 }
@@ -112,7 +116,9 @@ func (s *Server) handleKernelInfoRequest(socket zmq4.Socket, msg *Message, key [
 	}
 
 	zreply, _ := EncodeMessage(replyMsg, key)
-	_ = socket.Send(zreply)
+	if err := socket.Send(zreply); err != nil {
+		log.Printf("[Shell] kernel_info_reply send error: %v", err)
+	}
 }
 
 func (s *Server) handleIsCompleteRequest(socket zmq4.Socket, msg *Message, key []byte) {
@@ -141,7 +147,9 @@ func (s *Server) handleIsCompleteRequest(socket zmq4.Socket, msg *Message, key [
 	}
 
 	zreply, _ := EncodeMessage(replyMsg, key)
-	_ = socket.Send(zreply)
+	if err := socket.Send(zreply); err != nil {
+		log.Printf("[Shell] is_complete_reply send error: %v", err)
+	}
 }
 
 func (s *Server) handleCompleteRequest(socket zmq4.Socket, msg *Message, key []byte) {
@@ -176,7 +184,9 @@ func (s *Server) handleCompleteRequest(socket zmq4.Socket, msg *Message, key []b
 	}
 
 	zreply, _ := EncodeMessage(replyMsg, key)
-	_ = socket.Send(zreply)
+	if err := socket.Send(zreply); err != nil {
+		log.Printf("[Shell] complete_reply send error: %v", err)
+	}
 }
 
 func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []byte, iopub *IOPubNotifier) {
@@ -193,24 +203,34 @@ func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []by
 	// concurrent access for atomic to guard against.
 	s.executionCount++
 	count := int(s.executionCount)
-	_ = iopub.SendExecuteInput(msg.Header, req.Code, count)
+	if err := iopub.SendExecuteInput(msg.Header, req.Code, count); err != nil {
+		log.Printf("[Shell] SendExecuteInput error: %v", err)
+	}
 
 	res, execErr := s.sess.Execute(req.Code)
 
 	if res.Stdout != "" {
-		_ = iopub.SendStream(msg.Header, "stdout", res.Stdout)
+		if err := iopub.SendStream(msg.Header, "stdout", res.Stdout); err != nil {
+			log.Printf("[Shell] SendStream(stdout) error: %v", err)
+		}
 	}
 	if res.Stderr != "" {
-		_ = iopub.SendStream(msg.Header, "stderr", res.Stderr)
+		if err := iopub.SendStream(msg.Header, "stderr", res.Stderr); err != nil {
+			log.Printf("[Shell] SendStream(stderr) error: %v", err)
+		}
 	}
 
 	status := "ok"
 	if execErr != nil {
 		status = "error"
 		log.Printf("[Shell Error] Cell execution failed: %v", execErr)
-		_ = iopub.SendError(msg.Header, "ExecutionError", execErr.Error(), []string{execErr.Error()})
+		if err := iopub.SendError(msg.Header, "ExecutionError", execErr.Error(), []string{execErr.Error()}); err != nil {
+			log.Printf("[Shell] SendError error: %v", err)
+		}
 	} else if res.HasDisplay {
-		_ = iopub.SendExecuteResult(msg.Header, count, res.DisplayText)
+		if err := iopub.SendExecuteResult(msg.Header, count, res.DisplayText); err != nil {
+			log.Printf("[Shell] SendExecuteResult error: %v", err)
+		}
 	}
 
 	replyContent, _ := json.Marshal(map[string]any{
@@ -228,5 +248,7 @@ func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []by
 	}
 
 	zreply, _ := EncodeMessage(replyMsg, key)
-	_ = socket.Send(zreply)
+	if err := socket.Send(zreply); err != nil {
+		log.Printf("[Shell] execute_reply send error: %v", err)
+	}
 }

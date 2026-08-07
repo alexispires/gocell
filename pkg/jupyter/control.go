@@ -42,7 +42,9 @@ func StartControlLoop(ctx context.Context, conn *ConnectionInfo, iopub *IOPubNot
 					continue
 				}
 
-				_ = iopub.SendStatus(msg.Header, "busy")
+				if err := iopub.SendStatus(msg.Header, "busy"); err != nil {
+					log.Printf("[Control] SendStatus(busy) error: %v", err)
+				}
 
 				switch msg.Header.MsgType {
 				case "shutdown_request":
@@ -62,8 +64,12 @@ func StartControlLoop(ctx context.Context, conn *ConnectionInfo, iopub *IOPubNot
 					}
 
 					zreply, _ := EncodeMessage(replyMsg, key)
-					_ = socket.Send(zreply)
-					_ = iopub.SendStatus(msg.Header, "idle")
+					if err := socket.Send(zreply); err != nil {
+						log.Printf("[Control] shutdown_reply send error: %v", err)
+					}
+					if err := iopub.SendStatus(msg.Header, "idle"); err != nil {
+						log.Printf("[Control] SendStatus(idle) error: %v", err)
+					}
 
 					cancelFunc()
 					return
@@ -78,8 +84,12 @@ func StartControlLoop(ctx context.Context, conn *ConnectionInfo, iopub *IOPubNot
 					}
 
 					zreply, _ := EncodeMessage(replyMsg, key)
-					_ = socket.Send(zreply)
-					_ = iopub.SendStatus(msg.Header, "idle")
+					if err := socket.Send(zreply); err != nil {
+						log.Printf("[Control] interrupt_reply send error: %v", err)
+					}
+					if err := iopub.SendStatus(msg.Header, "idle"); err != nil {
+						log.Printf("[Control] SendStatus(idle) error: %v", err)
+					}
 				}
 			}
 		}

@@ -33,7 +33,9 @@ func StartHeartbeat(ctx context.Context, conn *ConnectionInfo) error {
 					continue
 				}
 				// Immediate echo reply
-				_ = socket.Send(msg)
+				if err := socket.Send(msg); err != nil {
+					log.Printf("[Heartbeat] Send error: %v", err)
+				}
 			}
 		}
 	}()
