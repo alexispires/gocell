@@ -42,6 +42,16 @@ func TestWriteKernelSpecCreatesTheDirectoryAndKernelJSON(t *testing.T) {
 	if spec.Env["GOCELL_MODULE_ROOT"] != "/home/user/go-jupyter" {
 		t.Fatalf("Unexpected GOCELL_MODULE_ROOT: %q", spec.Env["GOCELL_MODULE_ROOT"])
 	}
+
+	for _, name := range []string{"logo-32x32.png", "logo-64x64.png"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("Expected %s to have been written: %v", name, err)
+		}
+		if len(data) == 0 {
+			t.Fatalf("Expected %s to be non-empty", name)
+		}
+	}
 }
 
 func TestWriteKernelSpecOverwritesAnExistingKernelJSON(t *testing.T) {

@@ -1,6 +1,7 @@
 package installer
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +9,12 @@ import (
 	"path/filepath"
 	"runtime"
 )
+
+//go:embed assets/logo-32x32.png
+var logo32 []byte
+
+//go:embed assets/logo-64x64.png
+var logo64 []byte
 
 type KernelSpec struct {
 	Argv        []string          `json:"argv"`
@@ -75,9 +82,11 @@ func InstallKernelSpec() (string, error) {
 	return jupyterKernelDir, nil
 }
 
-// writeKernelSpec creates jupyterKernelDir and writes kernel.json into it. Split out from
-// InstallKernelSpec so tests can point it at a throwaway directory instead of the real,
-// hardcoded per-OS Jupyter kernels directory under the user's actual home directory.
+// writeKernelSpec creates jupyterKernelDir and writes kernel.json into it, along with the
+// logo-32x32.png/logo-64x64.png files Jupyter auto-detects by filename alone (no kernel.json
+// field needed) to show an icon in its kernel picker. Split out from InstallKernelSpec so
+// tests can point it at a throwaway directory instead of the real, hardcoded per-OS Jupyter
+// kernels directory under the user's actual home directory.
 func writeKernelSpec(jupyterKernelDir, kernelBinary, modRoot string) error {
 	if err := os.MkdirAll(jupyterKernelDir, 0755); err != nil {
 		return fmt.Errorf("failed to create kernelspec directory %s: %w", jupyterKernelDir, err)
@@ -100,6 +109,13 @@ func writeKernelSpec(jupyterKernelDir, kernelBinary, modRoot string) error {
 	kernelJsonPath := filepath.Join(jupyterKernelDir, "kernel.json")
 	if err := os.WriteFile(kernelJsonPath, specData, 0644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", kernelJsonPath, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(jupyterKernelDir, "logo-32x32.png"), logo32, 0644); err != nil {
+		return fmt.Errorf("failed to write logo-32x32.png: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(jupyterKernelDir, "logo-64x64.png"), logo64, 0644); err != nil {
+		return fmt.Errorf("failed to write logo-64x64.png: %w", err)
 	}
 
 	return nil
