@@ -127,6 +127,10 @@ type naturally.
   structural to `-buildmode=plugin`, not something build flags can reduce.
 - **No Windows support**, and the kernel and every cell plugin must share a Go toolchain
   version (handled automatically, see [pkg/compiler/builder.go](pkg/compiler/builder.go)).
+- **A new cell's first run includes compile time.** Measured on an Apple M2, a trivial
+  `fmt.Println` cell on a fresh kernel: gocell ~0.8s, vs. gonb ~0.5s and gophernotes ~0.1s
+  (which doesn't compile at all). The plugin cache makes every later run of that same cell
+  nearly free.
 
 ## License
 
