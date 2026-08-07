@@ -9,9 +9,9 @@
 [![codecov](https://codecov.io/gh/alexispires/gocell/branch/main/graph/badge.svg)](https://codecov.io/gh/alexispires/gocell)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Fheavy-model.ipynb)
 
-A Jupyter kernel for Go that runs every cell as a real compiled Go plugin
-(`-buildmode=plugin`), loaded into the kernel's own process. Session state — variables,
-goroutines, open connections — persists in memory across cells: no interpreter, no
+Run Go interactively — as a Jupyter kernel or a standalone REPL — by compiling every cell as
+a real Go plugin (`-buildmode=plugin`) loaded into one long-lived process. Session state —
+variables, goroutines, open connections — persists in memory across cells: no interpreter, no
 re-execution, cells share the same Go heap.
 
 ## Architecture
@@ -50,6 +50,10 @@ Types and functions declared in a cell are kept as source in a
 
 ## Notable features
 
+Everything below works identically in Jupyter and in `gocell-repl` — both are driven by the
+same [`session.Session`](pkg/session/session.go), which has no notion of which interface
+called it. The linked examples are notebooks only because that's what's written down so far.
+
 - **Goroutines that outlive a cell** — a `go func() { ... }()` started in one cell keeps
   running in the background, fed from and read from independent later cells
   ([examples/live-goroutines.ipynb](examples/live-goroutines.ipynb)).
@@ -81,9 +85,11 @@ A couple of smaller, still-genuine conveniences:
   re-running a cell doesn't hit Go's "no new variables" error; combined with the plugin cache
   (keyed by the generated code's hash), re-running an unchanged cell is nearly free.
 - **Auto-display** — a bare last expression is captured and shown as the cell's result
-  (Jupyter's `Out[n]`), instead of failing to compile.
+  (like Jupyter's `Out[n]`; the REPL just prints it), instead of failing to compile.
 
 ## Installation
+
+### Jupyter kernel
 
 ```sh
 go build -o gocell-kernel ./cmd/gocell-kernel
@@ -94,7 +100,7 @@ go build -o gocell-install ./cmd/gocell-install
 `gocell-install` points Jupyter at this repository via `GOCELL_MODULE_ROOT`, so the kernel
 can find the `gocell` module regardless of how Jupyter launches it.
 
-For a standalone REPL:
+### Standalone REPL
 
 ```sh
 go build -o gocell-repl ./cmd/gocell-repl
