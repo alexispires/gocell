@@ -34,7 +34,14 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test ./... -coverprofile=coverage.out
+        # pkg/runtime is excluded: it has no tests of its own (always 0% coverage), and Go's
+        # test coverage instrumentation covers the whole resolved package graph of `./...`, not
+        # just the literal test targets -- so including it here recompiles pkg/runtime with
+        # coverage counters for every test binary that imports it, while pkg/compiler's builder
+        # still compiles a plugin's copy of pkg/runtime normally in a separate `go build`
+        # subprocess. The two stop being bit-identical, and every test that loads a plugin fails
+        # with "plugin was built with a different version of package .../pkg/runtime".
+        run: go test $(go list ./... | grep -v '/pkg/runtime$') -coverprofile=coverage.out
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest'
