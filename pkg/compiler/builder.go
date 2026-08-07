@@ -138,7 +138,9 @@ replace github.com/alexispires/gocell => %q
 
 	soPath := filepath.Join(cellDir, "cell.so")
 
-	cmd := exec.Command("go", "build", "-mod=mod", "-buildmode=plugin", "-o", soPath, mainGoPath)
+	// -s -w doesn't reduce a loaded plugin's RSS (see README) but shrinks cell.so on disk by
+	// roughly a third, which does matter for the plugin cache across a long session.
+	cmd := exec.Command("go", "build", "-mod=mod", "-buildmode=plugin", "-ldflags=-s -w", "-o", soPath, mainGoPath)
 	cmd.Dir = cellDir
 
 	var stderrBuf bytes.Buffer

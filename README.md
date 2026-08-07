@@ -117,7 +117,8 @@ type naturally.
 
 - **Memory never comes back down.** Go's `plugin` package can't unload a `.so` — roughly
   1-1.4 MB of RSS per *distinct* cell, measured directly (the plugin cache makes
-  re-running the same cell nearly free). Only restarting the kernel reclaims it.
+  re-running the same cell nearly free). Only restarting the kernel reclaims it — this is
+  structural to `-buildmode=plugin`, not something build flags can reduce.
 - **No Windows support**, and the kernel and every cell plugin must share a Go toolchain
   version (handled automatically, see [pkg/compiler/builder.go](pkg/compiler/builder.go)).
 
