@@ -9,9 +9,6 @@ import (
 	"github.com/alexispires/gocell/pkg/runtime"
 )
 
-// ExecutorFunc is the signature of the Execute function generated in each cell plugin.
-type ExecutorFunc func(ctx *runtime.Context) error
-
 // PanicError describes a panic recovered from a cell's Execute. GeneratedLine, when non-zero,
 // is the line in the compiled plugin's own generated main.go where the panic actually
 // occurred (the innermost stack frame whose file is that plugin's main.go) -- session-level
