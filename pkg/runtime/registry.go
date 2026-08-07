@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"sync"
-	"sync/atomic"
 	"unsafe"
 )
 
@@ -34,13 +33,15 @@ func (r *Registry) GetPointer(name string) unsafe.Pointer {
 func (r *Registry) SetPointer(name string, typeName string, ptr unsafe.Pointer, keepAlive any) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	count := atomic.AddUint64(&r.counter, 1)
+	// A plain increment, not atomic.AddUint64: r.mu is already held exclusively for this
+	// entire method, so there is no concurrent access left for atomic to guard against.
+	r.counter++
 	r.symbols[name] = &Symbol{
 		Name:      name,
 		TypeName:  typeName,
 		Ptr:       ptr,
 		KeepAlive: keepAlive,
-		CreatedAt: count,
+		CreatedAt: r.counter,
 	}
 }
 

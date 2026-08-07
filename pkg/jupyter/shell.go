@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync/atomic"
 
 	"github.com/go-zeromq/zmq4"
 
@@ -189,7 +188,11 @@ func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []by
 		return
 	}
 
-	count := int(atomic.AddUint64(&s.executionCount, 1))
+	// A plain increment, not atomic.AddUint64: StartShellLoop is a single sequential loop
+	// (this method is never called from more than one goroutine at a time), so there is no
+	// concurrent access for atomic to guard against.
+	s.executionCount++
+	count := int(s.executionCount)
 	_ = iopub.SendExecuteInput(msg.Header, req.Code, count)
 
 	res, execErr := s.sess.Execute(req.Code)
