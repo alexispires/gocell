@@ -74,7 +74,21 @@ called it. The linked examples are notebooks only because that's what's written 
   [gonb](https://github.com/janpfeifer/gonb) (**1.44s**) the two are essentially tied — gonb
   also compiles real Go, so raw CPU-bound speed isn't the difference; the difference is that
   gonb recompiles and reruns its whole accumulated program every cell, rather than keeping
-  live state and goroutines in one process.
+  live state and goroutines in one process. That single-fit number doesn't capture what a real
+  notebook session looks like, though: three consecutive cells (fit, then two more reading the
+  result back) show the actual, cumulative cost of each approach.
+
+  | | fit | read #1 | read #2 | total |
+  |---|---:|---:|---:|---:|
+  | gocell | 2816 ms | 647 ms | 679 ms | **4142 ms** |
+  | gonb (no cache) | 2620 ms | 1968 ms *(refit)* | 1597 ms *(refit)* | 6185 ms |
+  | gonb (with [`gonb/cache`](https://pkg.go.dev/github.com/janpfeifer/gonb/cache)) | 3129 ms | 584 ms | 563 ms | 4276 ms |
+  | gophernotes | 81 991 ms | 1.6 ms | 1.5 ms | 81 994 ms |
+
+  Without explicitly reaching for gonb's own caching library, every cell that reads `w`/`b`
+  silently reruns the entire fit — gonb has no persistent process to keep the result in, so
+  "keeping a declaration alive" means recompiling and rerunning it. Used correctly with
+  `gonb/cache`, the gap nearly closes, but gocell still comes out ahead with zero extra code.
 - **Auto-import** — a cell can use `math.Sqrt(...)` with no `import "math"` line at all and it
   just compiles: every cell is run through real `goimports` before building, not just gofmt.
 - **Interruptible loops** — Ctrl-C, SIGINT, or Jupyter's "Interrupt" button stops a stuck
@@ -129,10 +143,19 @@ type naturally.
   structural to `-buildmode=plugin`, not something build flags can reduce.
 - **No Windows support**, and the kernel and every cell plugin must share a Go toolchain
   version (handled automatically, see [pkg/compiler/builder.go](pkg/compiler/builder.go)).
-- **A new cell's first run includes compile time.** Measured on an Apple M2, a trivial
-  `fmt.Println` cell on a fresh kernel: gocell ~0.8s, vs. gonb ~0.5s and gophernotes ~0.1s
-  (which doesn't compile at all). The plugin cache makes every later run of that same cell
-  nearly free.
+- **A new cell's first run includes compile time.** Measured on an Apple M2: a fresh kernel
+  process, started from scratch, up to and including its first `fmt.Println("hello world")`.
+  Run twice back to back — the second run is faster only because Go's own on-disk build cache
+  is warm, not because the kernel process is reused.
+
+  | | run 1 (ready + exec) | run 2 (ready + exec) |
+  |---|---:|---:|
+  | gocell | 753 + 1693 = **2446 ms** | 228 + 803 = **1031 ms** |
+  | gonb | 412 + 974 = **1386 ms** | 264 + 548 = **811 ms** |
+  | gophernotes | 698 + 110 = **807 ms** | 456 + 107 = **563 ms** |
+
+  gophernotes doesn't compile at all (gomacro interprets), so its "exec" time barely moves.
+  The plugin cache makes every later run of an unchanged cell nearly free regardless.
 
 ## License
 
