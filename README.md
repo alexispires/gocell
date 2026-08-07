@@ -16,8 +16,8 @@ re-execution, cells share the same Go heap.
 
 <table>
 <tr>
-<td><img src="assets/repl-demo.gif" alt="gocell-repl starting up" width="420"></td>
-<td><img src="assets/goroutine-demo.gif" alt="a background goroutine mutating a live variable across cells" width="420"></td>
+<td><img src="assets/repl-demo.gif" alt="gocell-repl starting up" width="400"></td>
+<td><img src="assets/goroutine-demo.gif" alt="a background goroutine mutating a live variable across cells" width="400"></td>
 </tr>
 </table>
 
