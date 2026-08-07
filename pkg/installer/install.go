@@ -69,13 +69,22 @@ func InstallKernelSpec() (string, error) {
 		jupyterKernelDir = filepath.Join(homeDir, ".local", "share", "jupyter", "kernels", "gocell")
 	}
 
+	if err := writeKernelSpec(jupyterKernelDir, absBinaryPath, modRoot); err != nil {
+		return "", err
+	}
+	return jupyterKernelDir, nil
+}
+
+// writeKernelSpec creates jupyterKernelDir and writes kernel.json into it. Split out from
+// InstallKernelSpec so tests can point it at a throwaway directory instead of the real,
+// hardcoded per-OS Jupyter kernels directory under the user's actual home directory.
+func writeKernelSpec(jupyterKernelDir, kernelBinary, modRoot string) error {
 	if err := os.MkdirAll(jupyterKernelDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create kernelspec directory %s: %w", jupyterKernelDir, err)
+		return fmt.Errorf("failed to create kernelspec directory %s: %w", jupyterKernelDir, err)
 	}
 
-	// 4. Write kernel.json with the GOCELL_MODULE_ROOT environment variable
 	spec := KernelSpec{
-		Argv:        []string{absBinaryPath, "{connection_file}"},
+		Argv:        []string{kernelBinary, "{connection_file}"},
 		DisplayName: "Go (gocell)",
 		Language:    "go",
 		Env: map[string]string{
@@ -85,13 +94,13 @@ func InstallKernelSpec() (string, error) {
 
 	specData, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to encode kernel.json: %w", err)
+		return fmt.Errorf("failed to encode kernel.json: %w", err)
 	}
 
 	kernelJsonPath := filepath.Join(jupyterKernelDir, "kernel.json")
 	if err := os.WriteFile(kernelJsonPath, specData, 0644); err != nil {
-		return "", fmt.Errorf("failed to write %s: %w", kernelJsonPath, err)
+		return fmt.Errorf("failed to write %s: %w", kernelJsonPath, err)
 	}
 
-	return jupyterKernelDir, nil
+	return nil
 }
