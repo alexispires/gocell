@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/alexispires/gocell/pkg/compiler"
 	"github.com/alexispires/gocell/pkg/session"
@@ -32,13 +33,22 @@ func main() {
 
 	fmt.Println("gocell - standalone Go REPL (Ctrl+D to exit)")
 
-	// Ctrl-C interrupts the cell currently running (a stuck for{}), rather than killing the
-	// process -- matching how the kernel now handles SIGINT, and how a terminal-attached
-	// Jupyter client's own Ctrl-C behaves for other kernels.
+	// SIGINT interrupts the cell currently running (a stuck for{}), rather than killing the
+	// process -- matching how the kernel handles it, and how a terminal-attached Jupyter
+	// client's own Ctrl-C behaves for other kernels. SIGTERM is a real shutdown: unlike the
+	// kernel's ctx.Done()-driven loop, the REPL's main goroutine is blocked in scanner.Scan()
+	// on stdin, which a signal can't unblock -- so this runs the workspace cleanup and exits
+	// explicitly here instead of relying on main's own deferred CleanUp, which an unhandled
+	// SIGTERM would otherwise skip entirely (default Go behavior is immediate termination, no
+	// deferred functions run).
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
-		for range sigChan {
+		for sig := range sigChan {
+			if sig == syscall.SIGTERM {
+				_ = wsMgr.CleanUp()
+				os.Exit(0)
+			}
 			sess.Interrupt()
 		}
 	}()
