@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/go-zeromq/zmq4"
 
 	"github.com/alexispires/gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/runtime"
 	"github.com/alexispires/gocell/pkg/session"
 	"github.com/alexispires/gocell/pkg/workspace"
 )
@@ -18,6 +20,34 @@ type Server struct {
 	conn           *ConnectionInfo
 	sess           *session.Session
 	executionCount uint64
+	stdin          *StdinRequester
+
+	// parent is the request being served, needed to address IOPub messages a cell publishes
+	// while it runs. Read from cell goroutines, so it is guarded.
+	parentMu sync.RWMutex
+	parent   Header
+}
+
+// AttachIOPub routes a cell's display.Show straight to the frontend as it is called, rather than
+// letting it queue until the cell ends. Nothing can update in place without this: every frame of a
+// progress bar would arrive after the loop that drew it had already finished.
+func (s *Server) AttachIOPub(iopub *IOPubNotifier) {
+	s.sess.SetDisplayHook(func(out runtime.Output, displayID string, update bool) {
+		s.parentMu.RLock()
+		parent := s.parent
+		s.parentMu.RUnlock()
+		if err := iopub.SendDisplayData(parent, out, displayID, update); err != nil {
+			log.Printf("[Shell] SendDisplayData error: %v", err)
+		}
+	})
+}
+
+// AttachStdin wires the Stdin channel to the session, so display.Input in a cell becomes an
+// input_request to the frontend. Without it a cell asking for input gets an error instead of a
+// prompt, which is the right outcome when there is no channel to ask on.
+func (s *Server) AttachStdin(r *StdinRequester) {
+	s.stdin = r
+	s.sess.SetInputFunc(r.Request)
 }
 
 // NewServer creates a new gocell server.
@@ -214,6 +244,13 @@ func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []by
 		log.Printf("[Shell] SendExecuteInput error: %v", err)
 	}
 
+	// Any input_request this cell raises has to be addressed to the client that sent this
+	// execute_request, and parented to it.
+	s.stdin.SetParent(msg)
+	s.parentMu.Lock()
+	s.parent = msg.Header
+	s.parentMu.Unlock()
+
 	res, execErr := s.sess.Execute(req.Code)
 
 	if res.Stdout != "" {
@@ -237,8 +274,9 @@ func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []by
 	} else {
 		// Explicit display.Show output first, in call order, then the cell's own last
 		// expression -- the same order Jupyter shows them in.
+		// Anything still queued ran without a live hook; normally empty.
 		for _, out := range res.Displays {
-			if err := iopub.SendDisplayData(msg.Header, out); err != nil {
+			if err := iopub.SendDisplayData(msg.Header, out, "", false); err != nil {
 				log.Printf("[Shell] SendDisplayData error: %v", err)
 			}
 		}

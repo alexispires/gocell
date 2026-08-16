@@ -27,6 +27,15 @@ type Context struct {
 	hasResult bool
 	displays  []Output
 
+	// publish sends an Output straight to the frontend instead of queueing it. Installed by the
+	// Jupyter layer, so pkg/runtime still knows nothing about ZMQ. Without it -- gocell-repl,
+	// tests -- Display falls back to the queue that Execute drains at the end of the cell.
+	publish func(o Output, displayID string, update bool)
+
+	// inputFn asks the frontend for a line. Installed by the Jupyter layer so pkg/runtime never
+	// learns about ZMQ; nil under gocell-repl and in tests, where there is no one to ask.
+	inputFn func(prompt string, password bool) (string, error)
+
 	stdCtx   context.Context
 	cancelFn context.CancelFunc
 }
@@ -127,12 +136,44 @@ func (c *Context) TakeResult() (Output, bool) {
 // Display queues an Output to be published as a display_data message. Unlike the single
 // SetAutoResult slot, this appends: a cell may show as many things as it likes.
 func (c *Context) Display(o Output) {
+	c.DisplayWithID(o, "", false)
+}
+
+// SetDisplayHook installs live publishing. Once set, Display goes out as it is called rather than
+// at the end of the cell -- which is what makes an in-place update mean anything: a progress bar
+// cannot progress if every frame is flushed after the cell has already finished.
+func (c *Context) SetDisplayHook(fn func(o Output, displayID string, update bool)) {
 	if c == nil {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.displays = append(c.displays, o)
+	c.publish = fn
+}
+
+// DisplayWithID shows an Output under a handle the frontend can find again. update=false creates
+// the output, update=true replaces whatever is already showing under that id -- including outputs
+// from earlier cells, which is how a single progress bar can be driven from several of them.
+func (c *Context) DisplayWithID(o Output, displayID string, update bool) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	fn := c.publish
+	if fn == nil {
+		// Nothing live to publish to: queue it, and drop updates, which have no meaning in a
+		// batch drained once at the end.
+		if !update {
+			c.displays = append(c.displays, o)
+		}
+		c.mu.Unlock()
+		return
+	}
+	c.mu.Unlock()
+
+	// Called outside the lock: publishing reaches ZMQ, and a cell goroutine calling Display
+	// while that is in flight must not be blocked behind a socket.
+	fn(o, displayID, update)
 }
 
 // TakeDisplays returns everything queued since the last call and clears the queue.
@@ -149,6 +190,42 @@ func (c *Context) TakeDisplays() []Output {
 	out := c.displays
 	c.displays = nil
 	return out
+}
+
+// SetInputFunc installs the hook that Input uses. Called once at kernel start.
+func (c *Context) SetInputFunc(fn func(prompt string, password bool) (string, error)) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.inputFn = fn
+}
+
+// HasInput reports whether anything can be prompted. The session uses it to decide whether the
+// cell is running somewhere with a frontend attached.
+func (c *Context) HasInput() bool {
+	if c == nil {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.inputFn != nil
+}
+
+// Input prompts the user and blocks until they answer.
+func (c *Context) Input(prompt string, password bool) (string, error) {
+	if c == nil {
+		return "", errors.New("no execution context")
+	}
+	c.mu.Lock()
+	fn := c.inputFn
+	c.mu.Unlock()
+
+	if fn == nil {
+		return "", errors.New("no frontend to prompt: input is only available under a Jupyter kernel")
+	}
+	return fn(prompt, password)
 }
 
 // GetPointer retrieves the raw memory address of a symbol by its name.

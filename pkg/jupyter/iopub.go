@@ -80,11 +80,24 @@ func (p *IOPubNotifier) SendExecuteResult(parent Header, executionCount int, out
 
 // SendDisplayData publishes something a cell showed explicitly. Same content as execute_result
 // minus execution_count, which is the only thing separating the two message types.
-func (p *IOPubNotifier) SendDisplayData(parent Header, out runtime.Output) error {
-	return p.Publish(parent, "display_data", map[string]any{
+//
+// A non-empty displayID names the output so it can be rewritten later; update replaces what is
+// already showing under that name rather than appending a new output.
+func (p *IOPubNotifier) SendDisplayData(parent Header, out runtime.Output, displayID string, update bool) error {
+	content := map[string]any{
 		"data":     bundleOrEmpty(out.Data),
 		"metadata": metaOrEmpty(out.Meta),
-	})
+	}
+	msgType := "display_data"
+	if displayID != "" {
+		// transient is the protocol's channel for data the frontend needs but should not
+		// persist in the notebook file -- exactly what a display id is.
+		content["transient"] = map[string]any{"display_id": displayID}
+		if update {
+			msgType = "update_display_data"
+		}
+	}
+	return p.Publish(parent, msgType, content)
 }
 
 // Both fields are required by the protocol and must serialize as {} rather than null.

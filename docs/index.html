@@ -282,6 +282,12 @@
   .jp-input .kw { color: var(--jp-kw); font-weight: 700; }
   .jp-input .op { color: var(--jp-op); }
   .jp-output { padding: 0.4em 0.6em; overflow-x: auto; }
+  /* Rendered markup, so it drops the monospace of a code output. */
+  .jp-output.nb-html {
+    font-family: var(--sans); font-size: 0.85rem; color: var(--jp-ink);
+    padding: 0.55em 0.7em; line-height: 1.6;
+  }
+  .jp-output.nb-html code { font-family: var(--mono); font-size: 0.92em; }
 
   /* ---------- Stat strip ---------- */
   .stat-strip {
@@ -301,10 +307,7 @@
   @media (max-width: 860px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
   @media (max-width: 560px) { .feature-grid { grid-template-columns: 1fr; } }
   .feature-card { background: var(--surface); padding: var(--sp-3); }
-  .feature-card.lead { grid-column: span 2; background: var(--surface-2); }
-  @media (max-width: 560px) { .feature-card.lead { grid-column: span 1; } }
   .feature-card h3 { font-size: 1rem; margin-bottom: 0.5em; }
-  .feature-card.lead h3 { font-size: 1.15rem; }
   .feature-card p { margin: 0; color: var(--ink-muted); font-size: 0.93rem; }
   .feature-card a.more { font-family: var(--mono); font-size: 0.78rem; display: inline-block; margin-top: 0.7em; text-decoration: none; }
 
@@ -429,7 +432,7 @@
     </a>
     <nav class="nav-links">
       <a href="#features">Features</a>
-      <a href="#speed">Speed</a>
+      <a href="#benchmarks">Benchmarks</a>
       <a href="#install">Install</a>
       <a class="opt" href="https://pkg.go.dev/github.com/alexispires/gocell">Docs</a>
       <a href="https://github.com/alexispires/gocell">GitHub</a>
@@ -498,10 +501,27 @@
           <div class="jp-cells" id="jp-cells">
             <div class="jp-cell">
               <div class="jp-prompt">In&nbsp;[1]:</div>
-              <div class="jp-input"><pre>counter <span class="op">:=</span> 0</pre></div>
+              <div class="jp-input"><pre>display.Show(display.HTML(`
+    &lt;span style="color:#00ADD8"&gt;&#9679;&lt;/span&gt;
+    &lt;b&gt;gocell&lt;/b&gt; renders
+    &lt;span style="color:#1A7F37"&gt;real HTML&lt;/span&gt;,
+    not &lt;code&gt;%#v&lt;/code&gt; text.`))</pre></div>
+            </div>
+            <div class="jp-cell">
+              <div class="jp-prompt out">&nbsp;</div>
+              <div class="jp-output nb-html">
+                <span style="color:#00ADD8">&#9679;</span>
+                <b>gocell</b> renders
+                <span style="color:#1A7F37">real HTML</span>,
+                not <code style="background:#EFEFEF;padding:0 .25em;border-radius:3px">%#v</code> text.
+              </div>
             </div>
             <div class="jp-cell">
               <div class="jp-prompt">In&nbsp;[2]:</div>
+              <div class="jp-input"><pre>counter <span class="op">:=</span> 0</pre></div>
+            </div>
+            <div class="jp-cell">
+              <div class="jp-prompt">In&nbsp;[3]:</div>
               <div class="jp-input"><pre><span class="kw">go</span> <span class="kw">func</span>() {
     <span class="kw">for</span> {
         counter++
@@ -510,11 +530,11 @@
 }()</pre></div>
             </div>
             <div class="jp-cell selected">
-              <div class="jp-prompt">In&nbsp;[3]:</div>
+              <div class="jp-prompt">In&nbsp;[4]:</div>
               <div class="jp-input"><pre>counter</pre></div>
             </div>
             <div class="jp-cell">
-              <div class="jp-prompt out">Out[3]:</div>
+              <div class="jp-prompt out">Out[4]:</div>
               <div class="jp-output"><pre>0</pre></div>
             </div>
           </div>
@@ -592,7 +612,7 @@ go build -o gocell-repl ./cmd/gocell-repl
       </div>
     </div>
     <p class="stat-more">
-      <a href="#speed">See how these were measured — full benchmarks →</a>
+      <a href="#benchmarks">See how these were measured →</a>
     </p>
   </section>
 
@@ -601,78 +621,54 @@ go build -o gocell-repl ./cmd/gocell-repl
   <section class="container-wide" id="features">
     <h2 class="section-title">Features</h2>
     <p class="section-lede">
-      Everything below works identically in Jupyter and in <code>gocell-repl</code> — both are
-      driven by the same session, which has no notion of which interface called it.
+      Identical in Jupyter and in <code>gocell-repl</code> — both drive the same session.
     </p>
     <div class="feature-grid">
-      <div class="feature-card lead">
-        <h3>Goroutines that outlive a cell</h3>
-        <p>
-          A <code>go func() { ... }()</code> started in one cell keeps running in the background,
-          fed from and read from independent later cells. A panic on one of these is recovered and
-          reported to stderr instead of taking the whole kernel down with it — the opposite of Go's
-          own default for a panic on any goroutine but the main one.
-        </p>
-        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/live-goroutines.ipynb">examples/live-goroutines.ipynb →</a>
+      <div class="feature-card">
+        <h3>Goroutines outlive their cell</h3>
+        <p>A <code>go func()</code> started in one cell keeps running, read from later ones. A panic on it is recovered instead of killing the kernel.</p>
+        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/live-goroutines.ipynb">live-goroutines.ipynb →</a>
+      </div>
+      <div class="feature-card">
+        <h3>State persists for free</h3>
+        <p>No serialization, no magic: a variable keeps the same memory address from cell to cell, because cells share one heap.</p>
+        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">heavy-model.ipynb →</a>
       </div>
       <div class="feature-card">
         <h3>Rich display</h3>
-        <p>Images, HTML, Markdown and JSON — not just text. An <code>image.Image</code> as a cell's last expression renders inline with no call at all; everything else goes through <code>display.Show(...)</code>, and a type you declare in a notebook can render itself.</p>
-        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/rich-display.ipynb">examples/rich-display.ipynb →</a>
+        <p>Images, HTML, Markdown, JSON — plus outputs that update in place. An <code>image.Image</code> renders with no call at all.</p>
+        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/rich-display.ipynb">rich-display.ipynb →</a>
       </div>
       <div class="feature-card">
-        <h3>State persists with zero effort</h3>
-        <p>No serialization, no <code>%store</code>-style magic: a variable's memory address is identical from cell to cell, because cells share the kernel process's own heap.</p>
-        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">examples/heavy-model.ipynb →</a>
-      </div>
-      <div class="feature-card">
-        <h3>Generics support</h3>
-        <p>Type parameters work both within a cell and across cells, the same as any other type or function declaration.</p>
-        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/generics.ipynb">examples/generics.ipynb →</a>
+        <h3>Generics</h3>
+        <p>Type parameters work within a cell and across cells, like any other declaration.</p>
+        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/generics.ipynb">generics.ipynb →</a>
       </div>
       <div class="feature-card">
         <h3>Auto-import</h3>
-        <p>A cell can use <code>math.Sqrt(...)</code> with no <code>import "math"</code> line at all — every cell runs through real <code>goimports</code> before building. Third-party packages resolve the same way, via a plain <code>go build</code>; set <code>GOPROXY</code> to control or restrict that.</p>
+        <p>Use <code>math.Sqrt(...)</code> with no import line — every cell runs through real <code>goimports</code>, and common third-party packages resolve too.</p>
       </div>
       <div class="feature-card">
-        <h3>Interruptible loops</h3>
-        <p>Ctrl-C, SIGINT, or Jupyter's "Interrupt" button stops a stuck <code>for</code>/<code>range</code> loop without restarting the kernel. Background goroutines are left untouched.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Idempotent re-execution</h3>
-        <p><code>:=</code> becomes <code>=</code> when every left-hand name already exists, so re-running a cell doesn't hit Go's "no new variables" error. Combined with the plugin cache, re-running an unchanged cell is nearly free.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Auto-display</h3>
-        <p>A bare last expression is captured and shown as the cell's result — like Jupyter's <code>Out[n]</code>, or just printed in the REPL — instead of failing to compile.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Go 1.25+</h3>
-        <p>Builds and runs against current Go toolchains. The kernel and every cell plugin share a toolchain version automatically.</p>
+        <h3>Interruptible</h3>
+        <p>Ctrl-C or Jupyter's Interrupt stops a stuck loop without restarting the kernel. Background goroutines are left alone.</p>
       </div>
     </div>
   </section>
 
   <!-- Speed -->
-  <section class="container-wide" id="speed">
-    <h2 class="section-title">Real compiled speed</h2>
+  <section class="container-wide" id="benchmarks">
+    <h2 class="section-title">Benchmarks</h2>
     <p class="section-lede">
-      Measured on an Apple M2, back to back, running
-      <a href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">examples/heavy-model.ipynb</a>'s
-      exact workload (8M samples, 140 epochs of gradient descent) unmodified. One fit: gocell
-      <strong>1.46s</strong>, gophernotes <strong>80.5s</strong> — about 20× — with both runs
-      converging to the same result. gonb lands at <strong>1.44s</strong>, essentially tied: it
-      also compiles real Go, so raw CPU-bound speed isn't the difference.
-    </p>
-    <p class="section-lede">
-      The difference shows up over a session. gonb recompiles and reruns its <em>whole accumulated
-      program</em> every cell, rather than keeping live state and goroutines in one process — so
-      three consecutive cells (fit, then two more reading the result back) tell the real story.
+      Apple M2, running
+      <a href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">heavy-model.ipynb</a>
+      unmodified — 8M samples, 140 epochs. One fit takes gocell <strong>1.46s</strong> against
+      gophernotes' <strong>80.5s</strong>. gonb ties at <strong>1.44s</strong>: it compiles real Go
+      too, so the difference is not raw speed but what survives between cells.
     </p>
 
     <div class="table-wrap">
       <table>
-        <caption>fit → read #1 → read #2, cumulative</caption>
+        <caption>fit, then two cells reading the result back</caption>
         <thead>
           <tr><th>engine</th><th>fit</th><th>read&nbsp;#1</th><th>read&nbsp;#2</th><th>total</th></tr>
         </thead>
@@ -685,10 +681,8 @@ go build -o gocell-repl ./cmd/gocell-repl
       </table>
     </div>
     <p class="note">
-      Without explicitly reaching for gonb's own caching library, every cell that reads the fitted
-      result silently reruns the entire fit — gonb has no persistent process to keep it in. Used
-      correctly with <code>gonb/cache</code>, the gap nearly closes; gocell still comes out ahead
-      with zero extra code.
+      gonb has no persistent process, so every cell that reads the result refits it.
+      <code>gonb/cache</code> nearly closes the gap; gocell needs no extra code.
     </p>
   </section>
 
@@ -822,7 +816,7 @@ go build -o gocell-repl ./cmd/gocell-repl
   var counter = 0;
   setInterval(function () { counter++; }, 1000);
 
-  var execCount = 3;
+  var execCount = 4;
 
   (function () {
     var cells = document.getElementById('jp-cells');
@@ -931,7 +925,8 @@ go build -o gocell-repl ./cmd/gocell-repl
   }
 
   wireTabs([pair('tab-nb', 'panel-nb'), pair('tab-repl', 'panel-repl')]);
-  wireTabs([pair('itab-nb', 'ipanel-nb'), pair('itab-repl', 'ipanel-repl')]);
+
+ wireTabs([pair('itab-nb', 'ipanel-nb'), pair('itab-repl', 'ipanel-repl')]);
 
   document.querySelectorAll('.copy-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {

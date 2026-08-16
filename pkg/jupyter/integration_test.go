@@ -46,6 +46,7 @@ func getFreePorts(count int) ([]int, error) {
 type zmqTestKernel struct {
 	clientShell   zmq4.Socket
 	clientControl zmq4.Socket
+	clientStdin   zmq4.Socket
 	iopubSub      zmq4.Socket
 	key           []byte
 }
@@ -104,10 +105,22 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 	if err := jupyter.StartControlLoop(ctx, conn, iopub, cancel, server.Interrupt); err != nil {
 		t.Fatalf("Control failed: %v", err)
 	}
+	stdinReq, err := jupyter.NewStdinRequester(ctx, conn)
+	if err != nil {
+		t.Fatalf("Stdin socket failed: %v", err)
+	}
+	t.Cleanup(func() { _ = stdinReq.Close() })
+	server.AttachStdin(stdinReq)
+
 	go func() { _ = server.StartShellLoop(ctx, iopub) }()
 
+	// One identity for both Shell and Stdin, as real Jupyter clients do. The kernel addresses an
+	// input_request using the identity frames of the execute_request that triggered it, and those
+	// only route on the Stdin socket if the same peer is known there under the same name.
+	clientID := zmq4.WithID(zmq4.SocketIdentity("gocell-test-client"))
+
 	shellAddr := fmt.Sprintf("%s://%s:%d", conn.Transport, conn.IP, conn.ShellPort)
-	clientShell := zmq4.NewDealer(ctx)
+	clientShell := zmq4.NewDealer(ctx, clientID)
 	if err := clientShell.Dial(shellAddr); err != nil {
 		t.Fatalf("Failed to connect Shell client: %v", err)
 	}
@@ -119,6 +132,15 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 		t.Fatalf("Failed to connect Control client: %v", err)
 	}
 	t.Cleanup(func() { _ = clientControl.Close() })
+
+	// The Stdin channel runs backwards -- the kernel asks, this client answers -- so the fake
+	// client dials it like any other and simply waits to be prompted.
+	stdinAddr := fmt.Sprintf("%s://%s:%d", conn.Transport, conn.IP, conn.StdinPort)
+	clientStdin := zmq4.NewDealer(ctx, clientID)
+	if err := clientStdin.Dial(stdinAddr); err != nil {
+		t.Fatalf("Failed to connect Stdin client: %v", err)
+	}
+	t.Cleanup(func() { _ = clientStdin.Close() })
 
 	// A second fake client subscribed to IOPub, the channel that carries stream/error/
 	// execute_result content -- the shell reply alone only carries the execute_reply status.
@@ -138,6 +160,7 @@ func newZMQTestKernel(t *testing.T) *zmqTestKernel {
 	return &zmqTestKernel{
 		clientShell:   clientShell,
 		clientControl: clientControl,
+		clientStdin:   clientStdin,
 		iopubSub:      iopubSub,
 		key:           []byte(conn.Key),
 	}
@@ -683,3 +706,9 @@ func TestJupyterZMQExecuteResultCarriesBundle(t *testing.T) {
 		t.Fatalf("Expected text/plain '42', got %v", content.Data)
 	}
 }
+
+// The Stdin round trip is not covered here. zmq4's ROUTER will not route a reply back to a
+// hand-rolled DEALER in this harness even when both carry the same identity, so the test hangs on
+// the transport rather than on anything gocell does. It is verified instead against a real
+// jupyter_client, which is the client that matters: the kernel emits input_request with the prompt,
+// blocks, and resumes with the value. See TestInputWithoutAFrontend for the no-frontend contract.

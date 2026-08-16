@@ -70,12 +70,21 @@ func main() {
 		log.Fatalf("Failed to start Heartbeat: %v", err)
 	}
 
-	// 3. Start Control Loop
+	// 3. Start the Stdin channel, the one that runs kernel -> frontend, so a cell can prompt.
+	stdin, err := jupyter.NewStdinRequester(ctx, conn)
+	if err != nil {
+		log.Fatalf("Failed to start Stdin socket: %v", err)
+	}
+	defer func() { _ = stdin.Close() }()
+	server.AttachStdin(stdin)
+	server.AttachIOPub(iopub)
+
+	// 4. Start Control Loop
 	if err := jupyter.StartControlLoop(ctx, conn, iopub, cancel, server.Interrupt); err != nil {
 		log.Fatalf("Failed to start Control loop: %v", err)
 	}
 
-	// 4. Start Shell Loop
+	// 5. Start Shell Loop
 	log.Printf("gocell Kernel started successfully. Listening on Shell channel %s:%d...", conn.IP, conn.ShellPort)
 
 	if err := server.StartShellLoop(ctx, iopub); err != nil {

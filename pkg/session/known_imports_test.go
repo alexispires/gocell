@@ -1,7 +1,9 @@
 package session
 
 import (
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/alexispires/gocell/pkg/workspace"
 )
@@ -58,4 +60,62 @@ func TestKnownImportsResolveWithoutAnImportLine(t *testing.T) {
 			t.Fatalf("expected 3, got %v", res.Result.Data)
 		}
 	})
+}
+
+// A cell asking for input where nothing can answer must fail, not hang. gocell-repl and any test
+// harness install no input hook, so this is also the contract for every non-Jupyter caller.
+func TestInputWithoutAFrontend(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("session: %v", err)
+	}
+
+	res, err := sess.Execute(`v, err := display.InputErr("name? "); fmt.Println("err:", err); v`)
+	if err != nil {
+		t.Fatalf("the cell itself must still run: %v", err)
+	}
+	if !strings.Contains(res.Stdout, "err:") || strings.Contains(res.Stdout, "err: <nil>") {
+		t.Fatalf("expected an error from InputErr with no frontend, got stdout %q", res.Stdout)
+	}
+}
+
+// With an input hook installed, a cell's direct read of os.Stdin gets EOF instead of blocking
+// forever -- the hang reported as gonb#38. Without the fd redirect this test never returns.
+func TestDirectStdinReadGetsEOFRatherThanHanging(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("session: %v", err)
+	}
+	sess.SetInputFunc(func(string, bool) (string, error) { return "unused", nil })
+
+	done := make(chan string, 1)
+	go func() {
+		res, execErr := sess.Execute(`var s string
+n, err := fmt.Scanln(&s)
+fmt.Println("n:", n, "err:", err)`)
+		if execErr != nil {
+			done <- "exec error: " + execErr.Error()
+			return
+		}
+		done <- res.Stdout
+	}()
+
+	select {
+	case out := <-done:
+		if !strings.Contains(out, "EOF") {
+			t.Fatalf("expected EOF from a direct stdin read, got %q", out)
+		}
+	case <-time.After(90 * time.Second):
+		t.Fatal("fmt.Scanln blocked: the kernel would be hung")
+	}
 }

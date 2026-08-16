@@ -7,6 +7,8 @@ package session
 import (
 	"errors"
 	"fmt"
+	"os"
+	"syscall"
 
 	"github.com/alexispires/gocell/pkg/compiler"
 	"github.com/alexispires/gocell/pkg/output"
@@ -68,6 +70,17 @@ func (s *Session) Interrupt() {
 	s.ctx.Cancel()
 }
 
+// SetInputFunc installs what display.Input calls. The Jupyter layer sets it; gocell-repl leaves it
+// nil, and a cell asking for input there gets an error rather than a prompt no one can answer.
+func (s *Session) SetInputFunc(fn func(prompt string, password bool) (string, error)) {
+	s.ctx.SetInputFunc(fn)
+}
+
+// SetDisplayHook installs live publishing for display.Show -- see runtime.Context.SetDisplayHook.
+func (s *Session) SetDisplayHook(fn func(o runtime.Output, displayID string, update bool)) {
+	s.ctx.SetDisplayHook(fn)
+}
+
 // GoVersion returns the Go toolchain version this session's cells are actually compiled with.
 func (s *Session) GoVersion() string {
 	return s.builder.GoVersion()
@@ -108,10 +121,17 @@ func (s *Session) Execute(code string) (Result, error) {
 		s.cache.Put(hash, soPath)
 	}
 
+	// Under a kernel there is no terminal on file descriptor 0, so a cell doing fmt.Scanln would
+	// block on a read that can never complete and take the whole kernel with it -- the failure
+	// reported in gonb#38. Pointing stdin at /dev/null for the duration turns that hang into an
+	// immediate EOF the cell can handle, and display.Input remains the way to actually ask.
+	restoreStdin := silenceStdin(s.ctx.HasInput())
+
 	capturer := output.NewCapturer()
 	_ = capturer.Start()
 	execErr := s.loader.LoadAndExecute(soPath, s.ctx)
 	stdoutStr, stderrStr, _ := capturer.Stop()
+	restoreStdin()
 	execErr = remapPanicError(execErr, lineMappings)
 
 	result, hasResult := s.ctx.TakeResult()
@@ -124,6 +144,37 @@ func (s *Session) Execute(code string) (Result, error) {
 		Displays:  s.ctx.TakeDisplays(),
 	}
 	return res, execErr
+}
+
+// silenceStdin swaps file descriptor 0 for /dev/null and returns the undo. A no-op when disabled,
+// so gocell-repl -- which really is reading a terminal -- is left alone.
+//
+// The descriptor is swapped rather than os.Stdin reassigned: a plugin reads through whatever fd 0
+// points at, and reassigning the Go variable would miss anything already holding the original.
+func silenceStdin(enabled bool) func() {
+	if !enabled {
+		return func() {}
+	}
+	const stdinFd = 0
+	saved, err := syscall.Dup(stdinFd)
+	if err != nil {
+		return func() {}
+	}
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+	if err != nil {
+		_ = syscall.Close(saved)
+		return func() {}
+	}
+	if err := syscall.Dup2(int(devNull.Fd()), stdinFd); err != nil {
+		_ = devNull.Close()
+		_ = syscall.Close(saved)
+		return func() {}
+	}
+	return func() {
+		_ = syscall.Dup2(saved, stdinFd)
+		_ = syscall.Close(saved)
+		_ = devNull.Close()
+	}
 }
 
 // remapPanicError rewrites a *plugin.PanicError's generated-file line number back into the
