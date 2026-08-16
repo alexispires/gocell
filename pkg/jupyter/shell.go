@@ -119,6 +119,9 @@ func (s *Server) StartShellLoop(ctx context.Context, iopub *IOPubNotifier) error
 			case "complete_request":
 				s.handleCompleteRequest(socket, msg, key)
 
+			case "inspect_request":
+				s.handleInspectRequest(socket, msg, key)
+
 			default:
 				log.Printf("[Shell] Ignored message type: %s", msg.Header.MsgType)
 			}
@@ -223,6 +226,46 @@ func (s *Server) handleCompleteRequest(socket zmq4.Socket, msg *Message, key []b
 	zreply, _ := EncodeMessage(replyMsg, key)
 	if err := socket.Send(zreply); err != nil {
 		log.Printf("[Shell] complete_reply send error: %v", err)
+	}
+}
+
+// handleInspectRequest answers Shift-Tab. found=false is a normal answer, not an error: the
+// frontend then shows its own help instead of an empty panel.
+func (s *Server) handleInspectRequest(socket zmq4.Socket, msg *Message, key []byte) {
+	var req struct {
+		Code      string `json:"code"`
+		CursorPos int    `json:"cursor_pos"`
+	}
+	if err := json.Unmarshal(msg.Content, &req); err != nil {
+		log.Printf("[Shell] inspect_request unmarshal error: %v", err)
+		return
+	}
+
+	text, found := s.sess.Inspect(req.Code, req.CursorPos)
+
+	content := map[string]any{
+		"status":   "ok",
+		"found":    found,
+		"data":     map[string]any{},
+		"metadata": map[string]any{},
+	}
+	if found {
+		// text/plain only: go doc's output is already laid out in columns, and wrapping it in
+		// HTML would destroy the alignment it relies on.
+		content["data"] = map[string]any{"text/plain": text}
+	}
+
+	replyContent, _ := json.Marshal(content)
+	replyMsg := &Message{
+		Identities:   msg.Identities,
+		Header:       NewHeader("inspect_reply", msg.Header.Session),
+		ParentHeader: msg.Header,
+		Metadata:     make(map[string]any),
+		Content:      replyContent,
+	}
+	zreply, _ := EncodeMessage(replyMsg, key)
+	if err := socket.Send(zreply); err != nil {
+		log.Printf("[Shell] inspect_reply send error: %v", err)
 	}
 }
 
