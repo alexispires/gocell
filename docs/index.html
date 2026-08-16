@@ -616,6 +616,11 @@ go build -o gocell-repl ./cmd/gocell-repl
         <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/live-goroutines.ipynb">examples/live-goroutines.ipynb →</a>
       </div>
       <div class="feature-card">
+        <h3>Rich display</h3>
+        <p>Images, HTML, Markdown and JSON — not just text. An <code>image.Image</code> as a cell's last expression renders inline with no call at all; everything else goes through <code>display.Show(...)</code>, and a type you declare in a notebook can render itself.</p>
+        <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/rich-display.ipynb">examples/rich-display.ipynb →</a>
+      </div>
+      <div class="feature-card">
         <h3>State persists with zero effort</h3>
         <p>No serialization, no <code>%store</code>-style magic: a variable's memory address is identical from cell to cell, because cells share the kernel process's own heap.</p>
         <a class="more" href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">examples/heavy-model.ipynb →</a>
@@ -716,6 +721,15 @@ go build -o gocell-repl ./cmd/gocell-repl
             <p>A generic type declared in one cell, its methods added in another, instantiated and used in a third.</p>
           </div>
           <a class="binder-btn" href="https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Fgenerics.ipynb"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10 8 16 12 10 16" fill="currentColor"/></svg>Launch on Binder</a>
+        </div>
+      </li>
+      <li>
+        <div class="ex-row">
+          <div>
+            <strong><a href="https://github.com/alexispires/gocell/blob/main/examples/rich-display.ipynb">rich-display.ipynb</a></strong>
+            <p>An image rendered straight from a bare expression, explicit HTML/Markdown/JSON, and a type that renders itself.</p>
+          </div>
+          <a class="binder-btn" href="https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Frich-display.ipynb"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10 8 16 12 10 16" fill="currentColor"/></svg>Launch on Binder</a>
         </div>
       </li>
     </ul>

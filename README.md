@@ -98,6 +98,11 @@ called it. The linked examples are notebooks only because that's what's written 
   silently reruns the entire fit — gonb has no persistent process to keep the result in, so
   "keeping a declaration alive" means recompiling and rerunning it. Used correctly with
   `gonb/cache`, the gap nearly closes, but gocell still comes out ahead with zero extra code.
+- **Rich display** — images, HTML, Markdown and JSON, not just text. An `image.Image` as a cell's
+  last expression is rendered inline with no call at all; everything else goes through
+  `display.Show(display.HTML(...))` and friends, and a type you declare in a notebook can render
+  itself by implementing `display.MIMEBundler`
+  ([examples/rich-display.ipynb](examples/rich-display.ipynb)).
 - **Auto-import** — a cell can use `math.Sqrt(...)` with no `import "math"` line at all and it
   just compiles: every cell is run through real `goimports` before building, not just gofmt.
   Third-party packages resolve the same way, via a plain `go build` — set `GOPROXY` in the
@@ -145,6 +150,8 @@ type naturally.
   goroutine started in one cell, fed jobs from later ones.
 - [examples/generics.ipynb](examples/generics.ipynb) — a generic type declared in one cell,
   its methods added in another, instantiated and used in a third.
+- [examples/rich-display.ipynb](examples/rich-display.ipynb) — an image rendered from a bare
+  expression, explicit HTML/Markdown/JSON, and a type that renders itself.
 
 ## Known limitations
 
@@ -154,13 +161,21 @@ type naturally.
   structural to `-buildmode=plugin`, not something build flags can reduce.
 - **No Windows support**, and the kernel and every cell plugin must share a Go toolchain
   version (handled automatically, see [pkg/compiler/builder.go](pkg/compiler/builder.go)).
-- **A background goroutine's output can bleed into an unrelated cell's captured stdout.**
-  Output capture redirects the underlying file descriptor for the duration of each cell
+- **A third-party package can collide with the kernel's own dependencies.** Go refuses to load a
+  plugin built against a different version of any package the kernel already links, so importing a
+  library that pulls in, say, a newer `golang.org/x/text` than the kernel has fails at load time with
+  *"plugin was built with a different version of package ..."*. Structural to `-buildmode=plugin`.
+  The fix is to align the version in gocell's own `go.mod` — which is why `golang.org/x/text` is
+  pinned forward there, so that gonum works out of the box.
+- **A background goroutine's output can bleed into an unrelated cell.** Output capture redirects
+  the underlying file descriptor for the duration of each cell
   ([pkg/output/capturer.go](pkg/output/capturer.go)), so a still-running goroutine
   ([examples/live-goroutines.ipynb](examples/live-goroutines.ipynb)) that prints while a later,
   unrelated cell is capturing can have its output show up there instead of on the kernel's own
-  console. Structural to redirecting a single shared file descriptor, not a synchronization bug
-  — the print itself is never corrupted or lost, just possibly misattributed.
+  console. `display.Show` has the same shape for the same reason — one shared sink, drained once per
+  cell — which also means everything a cell shows is published when it finishes rather than as each
+  call happens, so a `Show` and a later `fmt.Println` can arrive in the wrong order. Nothing is ever
+  corrupted or lost, only misordered or misattributed.
 - **A new cell's first run includes compile time.** Measured on an Apple M2: a fresh kernel
   process, started from scratch, up to and including its first `fmt.Println("hello world")`.
   Run twice back to back — the second run is faster only because Go's own on-disk build cache
