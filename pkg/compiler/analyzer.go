@@ -25,6 +25,13 @@ type AnalysisResult struct {
 	// ascending. GeneratePluginCode copies this into the matching LineMapping entry so
 	// remapPanicError can correct for the extra generated lines.
 	InjectedInterruptLines [][]int
+
+	// LastExprIsConversion reports that the cell's last statement is a type conversion --
+	// `int64(5)`, `[]byte("hi")`, `Celsius(20)`. Syntactically that is an *ast.CallExpr, which
+	// the generator otherwise leaves alone on the grounds that a bare call is already a valid
+	// statement; a conversion is not, and would fail to compile with "is not used". Only
+	// go/types can tell the two apart, hence recording it here.
+	LastExprIsConversion bool
 }
 
 // analysisFuncName wraps the cell's statements in the throwaway source handed to go/types.
@@ -125,6 +132,8 @@ func analyzeWithTypeChecker(
 		Uses:   make(map[*ast.Ident]types.Object),
 		Defs:   make(map[*ast.Ident]types.Object),
 		Scopes: make(map[ast.Node]*types.Scope),
+		// Needed only to tell a conversion from a call -- see lastExprIsConversion.
+		Types: make(map[ast.Expr]types.TypeAndValue),
 	}
 	conf := types.Config{
 		// Tolerant: the cell may well not type-check as a whole (an unresolvable third-party
@@ -157,8 +166,9 @@ func analyzeWithTypeChecker(
 	}
 
 	res := &AnalysisResult{
-		UsedSymbols:  make(map[string]*runtime.Symbol),
-		NewVariables: make([]string, 0),
+		UsedSymbols:          make(map[string]*runtime.Symbol),
+		NewVariables:         make([]string, 0),
+		LastExprIsConversion: lastExprIsConversion(cell, info),
 	}
 	exported := make(map[string]bool)
 
@@ -342,6 +352,28 @@ func buildAnalysisFile(
 	fn.Body.List = append(candFn.Body.List, cell.Stmts...)
 
 	return file, nil
+}
+
+// lastExprIsConversion reports whether the cell ends in a type conversion rather than a call.
+//
+// Both are *ast.CallExpr, and the generator has to treat them oppositely: `f(x)` stands alone as a
+// statement, while `int64(5)` does not and needs wrapping for the plugin to compile. The only
+// reliable way to tell is to ask go/types whether the thing being "called" is a type -- which works
+// here because buildAnalysisFile splices the cell's real statement nodes into the analysed file, so
+// these are the very nodes the checker annotated.
+func lastExprIsConversion(cell *CellContent, info *types.Info) bool {
+	if cell == nil || len(cell.Stmts) == 0 || info == nil {
+		return false
+	}
+	exprStmt, ok := cell.Stmts[len(cell.Stmts)-1].(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	call, ok := exprStmt.X.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	return info.Types[call.Fun].IsType()
 }
 
 func findFuncDecl(file *ast.File, name string) *ast.FuncDecl {

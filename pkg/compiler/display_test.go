@@ -4,6 +4,7 @@ import (
 	"github.com/alexispires/gocell/pkg/compiler"
 	"github.com/alexispires/gocell/pkg/plugin"
 	"github.com/alexispires/gocell/pkg/runtime"
+	"github.com/alexispires/gocell/pkg/session"
 	"github.com/alexispires/gocell/pkg/workspace"
 	"testing"
 )
@@ -78,5 +79,64 @@ func TestDisplayLastExpression(t *testing.T) {
 	run(`fmt.Sprintf("%d", x)`)
 	if out, ok := ctx.TakeResult(); ok {
 		t.Fatalf("A bare function call should not trigger auto-display, got %v", out.Data)
+	}
+}
+
+// A type conversion is an *ast.CallExpr just like a function call, but unlike a call it is not a
+// valid statement on its own -- `int64(5)` alone fails to compile with "is not used". Auto-display
+// used to skip every CallExpr, so any cell ending in a conversion was a compile error.
+func TestDisplayTypeConversion(t *testing.T) {
+	t.Parallel()
+
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := session.New(wsMgr)
+	if err != nil {
+		t.Fatalf("Failed to create session: %v", err)
+	}
+
+	cases := []struct {
+		code string
+		want string
+	}{
+		{`int64(5)`, "5"},
+		{`float64(3)`, "3"},
+		{`string([]byte("hi"))`, `"hi"`},
+	}
+	for _, c := range cases {
+		res, err := sess.Execute(c.code)
+		if err != nil {
+			t.Errorf("%s: %v", c.code, err)
+			continue
+		}
+		if !res.HasResult || res.Result.Data["text/plain"] != c.want {
+			t.Errorf("%s: expected %q, got %v", c.code, c.want, res.Result.Data)
+		}
+	}
+
+	// A conversion to a type the cell itself declared must work the same way.
+	if _, err := sess.Execute(`type Celsius float64`); err != nil {
+		t.Fatalf("declaring the type failed: %v", err)
+	}
+	res, err := sess.Execute(`Celsius(21.5)`)
+	if err != nil {
+		t.Fatalf("Celsius(21.5): %v", err)
+	}
+	if !res.HasResult {
+		t.Fatalf("expected a displayed result, got %+v", res)
+	}
+
+	// The other half of the rule must not regress: a bare call is already a valid statement and
+	// still displays nothing.
+	res, err = sess.Execute(`fmt.Sprintf("%d", 1)`)
+	if err != nil {
+		t.Fatalf("bare call: %v", err)
+	}
+	if res.HasResult {
+		t.Fatalf("a bare function call must not auto-display, got %v", res.Result.Data)
 	}
 }

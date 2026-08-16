@@ -162,7 +162,10 @@ func GeneratePluginCode(
 		// REPL-style display instead of failing to compile with "evaluated but not used".
 		if isLast {
 			if exprStmt, ok := stmt.(*ast.ExprStmt); ok {
-				if _, isCall := exprStmt.X.(*ast.CallExpr); !isCall {
+				// A bare call is already a valid statement and is left alone; a conversion looks
+				// identical in the AST but is not, so the analyzer's go/types verdict decides.
+				_, isCall := exprStmt.X.(*ast.CallExpr)
+				if !isCall || analysis.LastExprIsConversion {
 					var exprBuf strings.Builder
 					if err := printer.Fprint(&exprBuf, fset, exprStmt.X); err == nil {
 						// The expression itself, not a rendering of it: SetAutoResult picks between a
