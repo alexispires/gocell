@@ -154,6 +154,11 @@ replace github.com/alexispires/gocell => %q
 	cmd.Stderr = &stderrBuf
 
 	if err := cmd.Run(); err != nil {
+		// Keep err, not just stderr: a failure with nothing on stderr -- go missing from PATH, the
+		// process killed -- would otherwise surface as an empty message and be undiagnosable.
+		if stderrBuf.Len() == 0 {
+			return "", fmt.Errorf("plugin compilation failed with no compiler output: %w", err)
+		}
 		return "", fmt.Errorf("plugin compilation error:\n%s", stderrBuf.String())
 	}
 
