@@ -55,6 +55,10 @@ func AnalyzeCell(cell *CellContent, reg *runtime.Registry, importTracker *Import
 	// Must run before type-checking: it changes how the cell's own statements resolve.
 	rewriteTopLevelRedefinitions(cell, existing)
 
+	// Also before type-checking, and for the same reason: a cell saying `plot.New()` with no
+	// import line only resolves once the import is registered.
+	resolveKnownImports(cell, importTracker, symbolSet(existing))
+
 	result, err := analyzeWithTypeChecker(cell, existing, importTracker, typeRegistry)
 	if err != nil {
 		return nil, err
