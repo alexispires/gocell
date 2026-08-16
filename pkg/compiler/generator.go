@@ -165,7 +165,9 @@ func GeneratePluginCode(
 				if _, isCall := exprStmt.X.(*ast.CallExpr); !isCall {
 					var exprBuf strings.Builder
 					if err := printer.Fprint(&exprBuf, fset, exprStmt.X); err == nil {
-						line := fmt.Sprintf("\tctx.SetResult(fmt.Sprintf(\"%%#v\", %s))\n", exprBuf.String())
+						// The expression itself, not a rendering of it: SetAutoResult picks between a
+						// rich representation and %#v at run time, keeping that choice out of codegen.
+						line := fmt.Sprintf("\tctx.SetAutoResult(%s)\n", exprBuf.String())
 						bodySb.WriteString(line)
 						relLine += strings.Count(line, "\n")
 						continue

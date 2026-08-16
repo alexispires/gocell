@@ -51,10 +51,14 @@ func New(wsMgr *workspace.Manager) (*Session, error) {
 
 // Result is the outcome of executing one cell.
 type Result struct {
-	Stdout      string
-	Stderr      string
-	DisplayText string
-	HasDisplay  bool
+	Stdout string
+	Stderr string
+
+	// Result is the cell's last expression, shown as Jupyter's "Out[n]". Displays holds
+	// everything the cell passed to display.Show, in call order, and is usually empty.
+	Result    runtime.Output
+	HasResult bool
+	Displays  []runtime.Output
 }
 
 // Interrupt asks the currently running cell (if any) to stop at its next cooperative check --
@@ -110,13 +114,14 @@ func (s *Session) Execute(code string) (Result, error) {
 	stdoutStr, stderrStr, _ := capturer.Stop()
 	execErr = remapPanicError(execErr, lineMappings)
 
-	displayText, hasDisplay := s.ctx.TakeResult()
+	result, hasResult := s.ctx.TakeResult()
 
 	res := Result{
-		Stdout:      stdoutStr,
-		Stderr:      stderrStr,
-		DisplayText: displayText,
-		HasDisplay:  hasDisplay,
+		Stdout:    stdoutStr,
+		Stderr:    stderrStr,
+		Result:    result,
+		HasResult: hasResult,
+		Displays:  s.ctx.TakeDisplays(),
 	}
 	return res, execErr
 }

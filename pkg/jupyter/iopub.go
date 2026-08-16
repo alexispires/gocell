@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/alexispires/gocell/pkg/runtime"
 	"github.com/go-zeromq/zmq4"
 )
 
@@ -69,14 +70,36 @@ func (p *IOPubNotifier) SendStream(parent Header, name, text string) error {
 
 // SendExecuteResult publishes the value of a cell's last expression (equivalent to the
 // "Out[n]" displayed by other Jupyter kernels).
-func (p *IOPubNotifier) SendExecuteResult(parent Header, executionCount int, text string) error {
+func (p *IOPubNotifier) SendExecuteResult(parent Header, executionCount int, out runtime.Output) error {
 	return p.Publish(parent, "execute_result", map[string]any{
 		"execution_count": executionCount,
-		"data": map[string]any{
-			"text/plain": text,
-		},
-		"metadata": map[string]any{},
+		"data":            bundleOrEmpty(out.Data),
+		"metadata":        metaOrEmpty(out.Meta),
 	})
+}
+
+// SendDisplayData publishes something a cell showed explicitly. Same content as execute_result
+// minus execution_count, which is the only thing separating the two message types.
+func (p *IOPubNotifier) SendDisplayData(parent Header, out runtime.Output) error {
+	return p.Publish(parent, "display_data", map[string]any{
+		"data":     bundleOrEmpty(out.Data),
+		"metadata": metaOrEmpty(out.Meta),
+	})
+}
+
+// Both fields are required by the protocol and must serialize as {} rather than null.
+func bundleOrEmpty(b runtime.Bundle) map[string]any {
+	if b == nil {
+		return map[string]any{}
+	}
+	return b
+}
+
+func metaOrEmpty(m map[string]any) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	return m
 }
 
 // SendExecuteInput confirms to the client which code is currently being executed.

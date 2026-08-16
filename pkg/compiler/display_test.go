@@ -64,19 +64,19 @@ func TestDisplayLastExpression(t *testing.T) {
 
 	// Cell 2: bare identifier as the last line -> auto-displayed
 	run(`x`)
-	if text, ok := ctx.TakeResult(); !ok || text != "21" {
-		t.Fatalf("Expected result '21', got %q (ok=%v)", text, ok)
+	if out, ok := ctx.TakeResult(); !ok || out.Data["text/plain"] != "21" {
+		t.Fatalf("Expected result '21', got %v (ok=%v)", out.Data, ok)
 	}
 
 	// Cell 3: compound expression as the last line -> auto-displayed
 	run(`x * 2`)
-	if text, ok := ctx.TakeResult(); !ok || text != "42" {
-		t.Fatalf("Expected result '42', got %q (ok=%v)", text, ok)
+	if out, ok := ctx.TakeResult(); !ok || out.Data["text/plain"] != "42" {
+		t.Fatalf("Expected result '42', got %v (ok=%v)", out.Data, ok)
 	}
 
 	// Cell 4: bare function call -> already valid Go, no auto-display
 	run(`fmt.Sprintf("%d", x)`)
-	if text, ok := ctx.TakeResult(); ok {
-		t.Fatalf("A bare function call should not trigger auto-display, got %q", text)
+	if out, ok := ctx.TakeResult(); ok {
+		t.Fatalf("A bare function call should not trigger auto-display, got %v", out.Data)
 	}
 }

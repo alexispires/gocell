@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"sync"
 	"unsafe"
 )
 
@@ -17,20 +18,41 @@ type Context struct {
 	Registry *Registry
 	Types    *TypeRegistry
 
-	resultText string
-	hasResult  bool
+	// mu guards the display state below. The cell's own statements run on one goroutine, but a
+	// goroutine started by an earlier cell and still running -- gocell's whole point, see
+	// examples/live-goroutines.ipynb -- can call Display at the moment the kernel is draining, so
+	// this is a real race and not a theoretical one.
+	mu        sync.Mutex
+	result    Output
+	hasResult bool
+	displays  []Output
 
 	stdCtx   context.Context
 	cancelFn context.CancelFunc
 }
 
-// NewContext initializes an execution Context.
+// current is the Context that display.Show writes to, mirroring CPython's get_ipython() singleton.
+// This works for the same reason that one does: exactly one session exists per kernel process, and
+// -buildmode=plugin does not duplicate packages shared between host and plugin, so a plugin calling
+// into this package reaches the kernel's own state.
+var current *Context
+
+// Current returns the Context of the running session, or nil if none has been created. pkg/display
+// is a separate package and has no other way to reach it.
+func Current() *Context { return current }
+
+// NewContext initializes an execution Context and binds it as the current one.
+//
+// The binding lives here rather than behind an exported setter for two reasons: session.New already
+// calls this exactly once, so it cannot be forgotten, and nothing new is exported for cell code to
+// misuse.
 func NewContext(reg *Registry, tr *TypeRegistry) *Context {
 	c := &Context{
 		Registry: reg,
 		Types:    tr,
 	}
 	c.stdCtx, c.cancelFn = context.WithCancel(context.Background())
+	current = c
 	return c
 }
 
@@ -76,25 +98,57 @@ func (c *Context) StdContext() context.Context {
 	return c.stdCtx
 }
 
-// SetResult records the textual representation of a cell's last expression,
-// displayed by the kernel as an execute_result (equivalent to Jupyter's "Out[n]").
-func (c *Context) SetResult(s string) {
+// SetAutoResult records a cell's last expression, displayed by the kernel as an execute_result
+// (equivalent to Jupyter's "Out[n]"). Generated code passes the expression itself rather than a
+// pre-rendered string, so the choice between a rich representation and %#v is made here, in one
+// testable place, instead of in the code generator.
+func (c *Context) SetAutoResult(v any) {
 	if c == nil {
 		return
 	}
-	c.resultText = s
-	c.hasResult = true
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.result, c.hasResult = autoOutput(v), true
 }
 
 // TakeResult returns the current cell's displayed result and resets the state
 // for the next execution. The kernel calls this method once per cell.
-func (c *Context) TakeResult() (string, bool) {
+func (c *Context) TakeResult() (Output, bool) {
 	if c == nil {
-		return "", false
+		return Output{}, false
 	}
-	text, ok := c.resultText, c.hasResult
-	c.resultText, c.hasResult = "", false
-	return text, ok
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out, ok := c.result, c.hasResult
+	c.result, c.hasResult = Output{}, false
+	return out, ok
+}
+
+// Display queues an Output to be published as a display_data message. Unlike the single
+// SetAutoResult slot, this appends: a cell may show as many things as it likes.
+func (c *Context) Display(o Output) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.displays = append(c.displays, o)
+}
+
+// TakeDisplays returns everything queued since the last call and clears the queue.
+//
+// Known limitation, the display twin of the captured-stdout bleed-through already documented in the
+// README: draining happens per cell, so an Output queued by a background goroutine between cells is
+// published under whichever cell runs next. The print is never lost, only misattributed.
+func (c *Context) TakeDisplays() []Output {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.displays
+	c.displays = nil
+	return out
 }
 
 // GetPointer retrieves the raw memory address of a symbol by its name.

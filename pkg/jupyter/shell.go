@@ -234,9 +234,18 @@ func (s *Server) handleExecuteRequest(socket zmq4.Socket, msg *Message, key []by
 		if err := iopub.SendError(msg.Header, "ExecutionError", execErr.Error(), []string{execErr.Error()}); err != nil {
 			log.Printf("[Shell] SendError error: %v", err)
 		}
-	} else if res.HasDisplay {
-		if err := iopub.SendExecuteResult(msg.Header, count, res.DisplayText); err != nil {
-			log.Printf("[Shell] SendExecuteResult error: %v", err)
+	} else {
+		// Explicit display.Show output first, in call order, then the cell's own last
+		// expression -- the same order Jupyter shows them in.
+		for _, out := range res.Displays {
+			if err := iopub.SendDisplayData(msg.Header, out); err != nil {
+				log.Printf("[Shell] SendDisplayData error: %v", err)
+			}
+		}
+		if res.HasResult {
+			if err := iopub.SendExecuteResult(msg.Header, count, res.Result); err != nil {
+				log.Printf("[Shell] SendExecuteResult error: %v", err)
+			}
 		}
 	}
 

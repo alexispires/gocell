@@ -76,7 +76,7 @@ func TestExecuteCapturesDisplayResult(t *testing.T) {
 		t.Fatalf("New session failed: %v", err)
 	}
 
-	if res, err := sess.Execute(`x := 21`); err != nil || res.HasDisplay {
+	if res, err := sess.Execute(`x := 21`); err != nil || res.HasResult {
 		t.Fatalf("Expected no display for a plain declaration, got res=%+v err=%v", res, err)
 	}
 
@@ -84,7 +84,7 @@ func TestExecuteCapturesDisplayResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
 	}
-	if !res.HasDisplay || res.DisplayText != "42" {
+	if !res.HasResult || res.Result.Data["text/plain"] != "42" {
 		t.Fatalf("Expected display '42', got %+v", res)
 	}
 }
@@ -314,5 +314,54 @@ func TestSynchronousPanicIsStillReportedNotSwallowed(t *testing.T) {
 
 	if _, err := sess.Execute("var p *int\n_ = *p"); err == nil {
 		t.Fatalf("Expected a synchronous panic to still be reported as a cell error")
+	}
+}
+
+// End-to-end proof that a cell can reach the display API: the cell imports pkg/display, calls
+// Show twice, and both Outputs come back on the session's Result. This is also the only test that
+// exercises the package-level "current" Context binding across the plugin boundary -- the plugin
+// links against the kernel's own pkg/runtime, which is what makes Show reach this session at all.
+//
+// No t.Parallel(): runtime.NewContext binds a process-wide current Context.
+func TestCellCanShowRichContent(t *testing.T) {
+	wsMgr, err := workspace.NewManager("")
+	if err != nil {
+		t.Fatalf("Failed to create workspace: %v", err)
+	}
+	defer func() { _ = wsMgr.CleanUp() }()
+
+	sess, err := New(wsMgr)
+	if err != nil {
+		t.Fatalf("New session failed: %v", err)
+	}
+
+	res, err := sess.Execute(`
+display.Show(display.HTML("<b>hi</b>"))
+display.Show(display.Markdown("# title"))
+`)
+	if err != nil {
+		t.Fatalf("Execution failed: %v", err)
+	}
+
+	if len(res.Displays) != 2 {
+		t.Fatalf("Expected 2 displays, got %d (%+v)", len(res.Displays), res.Displays)
+	}
+	if res.Displays[0].Data["text/html"] != "<b>hi</b>" {
+		t.Fatalf("First display wrong: %v", res.Displays[0].Data)
+	}
+	if res.Displays[1].Data["text/markdown"] != "# title" {
+		t.Fatalf("Second display wrong: %v", res.Displays[1].Data)
+	}
+
+	// A second cell must start with an empty queue.
+	res, err = sess.Execute(`1 + 1`)
+	if err != nil {
+		t.Fatalf("Execution failed: %v", err)
+	}
+	if len(res.Displays) != 0 {
+		t.Fatalf("Displays leaked into the next cell: %+v", res.Displays)
+	}
+	if !res.HasResult || res.Result.Data["text/plain"] != "2" {
+		t.Fatalf("Expected result '2', got %+v", res.Result.Data)
 	}
 }

@@ -625,3 +625,61 @@ func TestJupyterZMQInterruptStopsAHangingCell(t *testing.T) {
 		t.Fatalf("Expected execute_reply status 'error' after interrupt, got %q", status.Status)
 	}
 }
+
+// TestJupyterZMQPublishesDisplayData verifies the full rich-display path over a real socket: a
+// cell's display.Show call must arrive as a display_data message carrying a MIME bundle, not as a
+// stream of text. A client renders HTML from this message and nothing else, so asserting only on
+// the session's in-memory Result would miss a wiring regression between session and IOPub.
+func TestJupyterZMQPublishesDisplayData(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	reply := k.execute(t, `display.Show(display.HTML("<b>rich</b>"))`)
+	var status struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(reply.Content, &status)
+	if status.Status != "ok" {
+		t.Fatalf("Expected execute_reply status 'ok', got %q", status.Status)
+	}
+
+	msg := k.recvIOPubUntil(t, "display_data")
+	var content struct {
+		Data     map[string]any `json:"data"`
+		Metadata map[string]any `json:"metadata"`
+	}
+	if err := json.Unmarshal(msg.Content, &content); err != nil {
+		t.Fatalf("Failed to decode display_data content: %v", err)
+	}
+	if content.Data["text/html"] != "<b>rich</b>" {
+		t.Fatalf("Expected a text/html entry, got %v", content.Data)
+	}
+	// Every bundle keeps a text/plain fallback for frontends that cannot render the rich type.
+	if _, ok := content.Data["text/plain"]; !ok {
+		t.Fatalf("Expected a text/plain fallback alongside text/html, got %v", content.Data)
+	}
+	// Required by the protocol: absent metadata must serialize as {} rather than null.
+	if content.Metadata == nil {
+		t.Fatal("metadata must be an object, not null")
+	}
+}
+
+// TestJupyterZMQExecuteResultCarriesBundle pins the shape of execute_result now that it ships a
+// MIME bundle: an ordinary value must still arrive as plain text under the same message type it
+// always used, so existing clients see no change.
+func TestJupyterZMQExecuteResultCarriesBundle(t *testing.T) {
+	k := newZMQTestKernel(t)
+
+	k.execute(t, `n := 21`)
+	k.execute(t, `n * 2`)
+
+	msg := k.recvIOPubUntil(t, "execute_result")
+	var content struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(msg.Content, &content); err != nil {
+		t.Fatalf("Failed to decode execute_result content: %v", err)
+	}
+	if content.Data["text/plain"] != "42" {
+		t.Fatalf("Expected text/plain '42', got %v", content.Data)
+	}
+}

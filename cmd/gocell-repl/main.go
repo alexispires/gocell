@@ -13,9 +13,17 @@ import (
 	"syscall"
 
 	"github.com/alexispires/gocell/pkg/compiler"
+	"github.com/alexispires/gocell/pkg/runtime"
 	"github.com/alexispires/gocell/pkg/session"
 	"github.com/alexispires/gocell/pkg/workspace"
 )
+
+// printPlain writes an Output's text/plain representation, which every Output carries.
+func printPlain(out runtime.Output) {
+	if s, ok := out.Data["text/plain"].(string); ok {
+		fmt.Println(s)
+	}
+}
 
 func main() {
 	wsMgr, err := workspace.NewManager("")
@@ -106,7 +114,11 @@ func runCell(sess *session.Session, code string) {
 		return
 	}
 
-	if res.HasDisplay {
-		fmt.Println(res.DisplayText)
+	// No Jupyter frontend here, so only the text/plain entry of each Output can be rendered.
+	for _, out := range res.Displays {
+		printPlain(out)
+	}
+	if res.HasResult {
+		printPlain(res.Result)
 	}
 }
