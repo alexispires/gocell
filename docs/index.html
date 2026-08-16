@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>gocell — a compiled Go Jupyter kernel</title>
+<title>gocell — the next generation of REPL and Jupyter kernel for Go</title>
 <meta name="description" content="gocell runs Go interactively — as a Jupyter kernel or a standalone REPL — by compiling every cell as a real Go plugin loaded into one long-lived process. State persists in memory across cells: no interpreter, no re-execution.">
-<meta property="og:title" content="gocell — a compiled Go Jupyter kernel">
+<meta property="og:title" content="gocell — the next generation of REPL and Jupyter kernel for Go">
 <meta property="og:description" content="Every cell compiles to a real Go plugin, loaded into one long-lived process. Variables, goroutines, and open connections persist in memory across cells.">
 <meta property="og:image" content="https://raw.githubusercontent.com/alexispires/gocell/main/assets/social-preview.png">
 <meta property="og:type" content="website">
@@ -127,30 +127,11 @@
   .container { max-width: var(--content-w); margin: 0 auto; padding-inline: var(--sp-3); }
   .container-wide { max-width: var(--wide-w); margin: 0 auto; padding-inline: var(--sp-3); }
   /* One vertical rhythm for every section, so each dividing rule sits centered in equal space. */
-  section { padding-block: var(--sp-6); border-top: 1px solid var(--rule); }
+  section { padding-block: var(--sp-5); border-top: 1px solid var(--rule); }
   section:first-of-type { border-top: none; }
 
-  .eyebrow {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: var(--teal);
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    margin-bottom: var(--sp-2);
-  }
-  .eyebrow::before {
-    content: "";
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--teal);
-    flex: none;
-  }
-
-  h2.section-title { font-size: clamp(1.4rem, 2.6vw, 1.9rem); margin-bottom: var(--sp-2); }
-  section.minor h2.section-title { font-size: clamp(1.15rem, 2vw, 1.4rem); }
+  h2.section-title { font-size: clamp(1.35rem, 2.5vw, 1.75rem); margin-bottom: var(--sp-2); }
+  section.minor h2.section-title { font-size: clamp(1.2rem, 2.1vw, 1.5rem); }
   .section-lede { max-width: 62ch; color: var(--ink-muted); font-size: 1.05rem; margin-bottom: var(--sp-4); }
   section.minor .section-lede { font-size: 0.95rem; margin-bottom: var(--sp-3); }
 
@@ -182,7 +163,7 @@
   }
   @media (max-width: 940px) { .hero-grid { grid-template-columns: 1fr; gap: var(--sp-5); } }
 
-  .hero h1 { font-size: clamp(2rem, 4.2vw, 3rem); letter-spacing: -0.01em; }
+  .hero h1 { font-size: clamp(1.75rem, 3.5vw, 2.5rem); letter-spacing: -0.01em; }
   .hero h1 .accent { color: var(--accent); }
   .hero-lede { margin-top: var(--sp-3); color: var(--ink-muted); font-size: 1.1rem; max-width: 46ch; }
 
@@ -303,7 +284,6 @@
   .jp-output { padding: 0.4em 0.6em; overflow-x: auto; }
 
   /* ---------- Stat strip ---------- */
-  .stats-section { border-top: none; }
   .stat-strip {
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
     background: var(--rule); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden;
@@ -312,6 +292,9 @@
   .stat { background: var(--surface); padding: var(--sp-3); }
   .stat b { display: block; font-family: var(--mono); font-size: clamp(1.7rem, 3.6vw, 2.4rem); color: var(--accent); line-height: 1; font-variant-numeric: tabular-nums; }
   .stat span { display: block; margin-top: 0.55em; color: var(--ink-muted); font-size: 0.9rem; }
+  .stat-more { margin: var(--sp-2) 0 0; font-family: var(--mono); font-size: 0.82rem; }
+  .stat-more a { text-decoration: none; border-bottom: 1px solid var(--rule); padding-bottom: 0.15em; }
+  .stat-more a:hover { border-bottom-color: var(--accent); }
 
   /* ---------- Feature grid ---------- */
   .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: var(--radius); overflow: hidden; }
@@ -349,9 +332,12 @@
   .pipeline p { margin: 0; color: var(--ink-muted); font-size: 0.84rem; }
 
   /* ---------- Install ---------- */
-  .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
-  @media (max-width: 760px) { .install-grid { grid-template-columns: 1fr; } }
-  .install-block h3 { font-size: 0.95rem; margin-bottom: 0.7em; }
+  .install-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-3);
+  }
+  .install-head .section-lede { margin-bottom: 0; }
+  .code-screen[hidden] { display: none; }
   .code-screen { position: relative; background: var(--term-bg); border: 1px solid var(--term-rule); border-radius: 8px; overflow: hidden; }
   .code-screen .term-body { height: auto; padding: 1.1em 1.2em; }
   .copy-btn {
@@ -372,6 +358,50 @@
   .stack.tight li { padding: 0.7em 0; }
   .stack.tight p { font-size: 0.9rem; }
   .stack.tight strong { font-size: 0.92rem; font-family: var(--mono); font-weight: 700; }
+
+  /* ---------- Examples ---------- */
+  .ex-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--sp-3); flex-wrap: wrap;
+  }
+  .ex-row > div { flex: 1 1 24rem; }
+  .binder-btn {
+    flex: none; display: inline-flex; align-items: center; gap: 0.5em;
+    font-family: var(--mono); font-size: 0.8rem; font-weight: 700;
+    text-decoration: none; white-space: nowrap;
+    padding: 0.55em 0.95em; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .binder-btn svg { width: 1.05em; height: 1.05em; flex: none; }
+  .binder-btn:hover { background: var(--accent); color: var(--bg); }
+  @media (prefers-reduced-motion: reduce) { .binder-btn { transition: none; } }
+
+  /* ---------- Disclosure ---------- */
+  details.disclose > summary {
+    list-style: none; cursor: pointer;
+    display: flex; align-items: center; gap: 0.55em;
+    font-family: var(--mono); font-weight: 700; line-height: 1.15;
+    font-size: clamp(1.2rem, 2.1vw, 1.5rem);
+    color: var(--ink);
+  }
+  details.disclose > summary::-webkit-details-marker { display: none; }
+  /* Chevron drawn from two borders rather than a glyph, so it inherits the accent and
+     rotates cleanly on toggle. */
+  details.disclose > summary::after {
+    content: ""; flex: none;
+    width: 0.42em; height: 0.42em;
+    border-right: 2px solid var(--accent);
+    border-bottom: 2px solid var(--accent);
+    transform: translateY(-0.12em) rotate(45deg);
+    transition: transform 0.18s ease;
+  }
+  details.disclose[open] > summary::after { transform: translateY(0.06em) rotate(-135deg); }
+  @media (prefers-reduced-motion: reduce) {
+    details.disclose > summary::after { transition: none; }
+  }
+  details.disclose > summary:hover { color: var(--accent); }
+  details.disclose > *:not(summary) { margin-top: var(--sp-3); }
 
   /* ---------- Footer ---------- */
   footer { padding: var(--sp-5) 0 var(--sp-6); border-top: 1px solid var(--rule); }
@@ -404,8 +434,7 @@
   <section class="hero container-wide">
     <div class="hero-grid">
       <div>
-        <div class="eyebrow">Go · Jupyter kernel &amp; REPL</div>
-        <h1>Compile every cell.<br>Keep the process <span class="accent">running.</span></h1>
+        <h1>The next generation of <span class="accent">REPL</span> and <span class="accent">Jupyter kernel</span> for Go</h1>
         <p class="hero-lede">
           gocell runs Go interactively — as a Jupyter kernel or a standalone REPL — by compiling
           every cell as a real Go plugin (<code>-buildmode=plugin</code>) loaded into one
@@ -508,6 +537,35 @@
     </div>
   </section>
 
+  <!-- Install -->
+  <section class="container-wide" id="install">
+    <h2 class="section-title">Installation</h2>
+    <div class="install-head">
+      <p class="section-lede">Go 1.25+, macOS or Linux.</p>
+      <div class="switch" role="tablist" aria-label="Choose what to install">
+        <button role="tab" id="itab-nb" aria-controls="ipanel-nb" aria-selected="true">Notebook</button>
+        <button role="tab" id="itab-repl" aria-controls="ipanel-repl" aria-selected="false">REPL</button>
+      </div>
+    </div>
+
+    <div class="code-screen" id="ipanel-nb" role="tabpanel" aria-labelledby="itab-nb">
+      <button class="copy-btn" data-target="code-install-nb">Copy</button>
+      <div class="term-body"><pre id="code-install-nb">git clone https://github.com/alexispires/gocell.git
+cd gocell
+go build -o gocell-kernel ./cmd/gocell-kernel
+go build -o gocell-install ./cmd/gocell-install
+./gocell-install</pre></div>
+    </div>
+
+    <div class="code-screen" id="ipanel-repl" role="tabpanel" aria-labelledby="itab-repl" hidden>
+      <button class="copy-btn" data-target="code-install-repl">Copy</button>
+      <div class="term-body"><pre id="code-install-repl">git clone https://github.com/alexispires/gocell.git
+cd gocell
+go build -o gocell-repl ./cmd/gocell-repl
+./gocell-repl</pre></div>
+    </div>
+  </section>
+
   <!-- Stat strip -->
   <section class="container-wide stats-section">
     <div class="stat-strip">
@@ -524,12 +582,15 @@
         <span>lines of caching or serialization code needed to keep state alive between cells.</span>
       </div>
     </div>
+    <p class="stat-more">
+      <a href="#speed">See how these were measured — full benchmarks →</a>
+    </p>
   </section>
+
 
   <!-- Features -->
   <section class="container-wide" id="features">
-    <div class="eyebrow">What you get</div>
-    <h2 class="section-title">One live process, for as long as you keep it open</h2>
+    <h2 class="section-title">Features</h2>
     <p class="section-lede">
       Everything below works identically in Jupyter and in <code>gocell-repl</code> — both are
       driven by the same session, which has no notion of which interface called it.
@@ -580,8 +641,7 @@
 
   <!-- Speed -->
   <section class="container-wide" id="speed">
-    <div class="eyebrow">Real compiled speed</div>
-    <h2 class="section-title">Compiled, not interpreted — and it stays compiled</h2>
+    <h2 class="section-title">Real compiled speed</h2>
     <p class="section-lede">
       Measured on an Apple M2, back to back, running
       <a href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">examples/heavy-model.ipynb</a>'s
@@ -618,59 +678,43 @@
     </p>
   </section>
 
-  <!-- Install -->
-  <section class="container-wide" id="install">
-    <div class="eyebrow">Installation</div>
-    <h2 class="section-title">Two ways to run it</h2>
-    <p class="section-lede">Go 1.25+, macOS or Linux.</p>
-
-    <div class="install-grid">
-      <div class="install-block">
-        <h3>Jupyter kernel</h3>
-        <div class="code-screen">
-          <button class="copy-btn" data-target="code-kernel">Copy</button>
-          <div class="term-body"><pre id="code-kernel">go build -o gocell-kernel ./cmd/gocell-kernel
-go build -o gocell-install ./cmd/gocell-install
-./gocell-install</pre></div>
-        </div>
-        <p class="note" style="margin-top: 0.8em;"><code>gocell-install</code> points Jupyter at the repository via <code>GOCELL_MODULE_ROOT</code>, so the kernel finds the module regardless of how Jupyter launches it.</p>
-      </div>
-      <div class="install-block">
-        <h3>Standalone REPL</h3>
-        <div class="code-screen">
-          <button class="copy-btn" data-target="code-repl">Copy</button>
-          <div class="term-body"><pre id="code-repl">go build -o gocell-repl ./cmd/gocell-repl
-./gocell-repl</pre></div>
-        </div>
-        <p class="note" style="margin-top: 0.8em;">A cell runs as soon as its braces balance, so multi-line <code>func</code>/<code>type</code>/<code>if</code>/<code>for</code> blocks type naturally.</p>
-      </div>
-    </div>
-  </section>
-
   <!-- Examples -->
   <section class="container-wide minor">
-    <div class="eyebrow">Examples</div>
-    <h2 class="section-title">Notebooks worth reading top to bottom</h2>
+    <h2 class="section-title">Examples</h2>
     <ul class="stack tight">
       <li>
-        <strong><a href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">heavy-model.ipynb</a></strong>
-        <p>Fits a model once, reuses it across independent cells: same memory address throughout.</p>
+        <div class="ex-row">
+          <div>
+            <strong><a href="https://github.com/alexispires/gocell/blob/main/examples/heavy-model.ipynb">heavy-model.ipynb</a></strong>
+            <p>Fits a model once, reuses it across independent cells: same memory address throughout.</p>
+          </div>
+          <a class="binder-btn" href="https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Fheavy-model.ipynb"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10 8 16 12 10 16" fill="currentColor"/></svg>Launch on Binder</a>
+        </div>
       </li>
       <li>
-        <strong><a href="https://github.com/alexispires/gocell/blob/main/examples/live-goroutines.ipynb">live-goroutines.ipynb</a></strong>
-        <p>A background goroutine started in one cell, mutating a counter read back from independent later cells.</p>
+        <div class="ex-row">
+          <div>
+            <strong><a href="https://github.com/alexispires/gocell/blob/main/examples/live-goroutines.ipynb">live-goroutines.ipynb</a></strong>
+            <p>A background goroutine started in one cell, mutating a counter read back from independent later cells.</p>
+          </div>
+          <a class="binder-btn" href="https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Flive-goroutines.ipynb"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10 8 16 12 10 16" fill="currentColor"/></svg>Launch on Binder</a>
+        </div>
       </li>
       <li>
-        <strong><a href="https://github.com/alexispires/gocell/blob/main/examples/generics.ipynb">generics.ipynb</a></strong>
-        <p>A generic type declared in one cell, its methods added in another, instantiated and used in a third.</p>
+        <div class="ex-row">
+          <div>
+            <strong><a href="https://github.com/alexispires/gocell/blob/main/examples/generics.ipynb">generics.ipynb</a></strong>
+            <p>A generic type declared in one cell, its methods added in another, instantiated and used in a third.</p>
+          </div>
+          <a class="binder-btn" href="https://mybinder.org/v2/gh/alexispires/gocell/HEAD?labpath=examples%2Fgenerics.ipynb"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10 8 16 12 10 16" fill="currentColor"/></svg>Launch on Binder</a>
+        </div>
       </li>
     </ul>
   </section>
 
   <!-- How it works (compact) -->
   <section class="container-wide minor">
-    <div class="eyebrow">Under the hood</div>
-    <h2 class="section-title">Five stages, every cell</h2>
+    <h2 class="section-title">How it works</h2>
     <p class="section-lede">
       Owned by <a href="https://github.com/alexispires/gocell/blob/main/pkg/session/session.go">session.Session</a>,
       which doesn't depend on Jupyter or ZMQ — it drives the kernel and the REPL the same way.
@@ -709,9 +753,9 @@ go build -o gocell-install ./cmd/gocell-install
 
   <!-- Limitations (compact) -->
   <section class="container-wide minor">
-    <div class="eyebrow">Trade-offs</div>
-    <h2 class="section-title">Known limitations</h2>
-    <ul class="stack tight">
+    <details class="disclose">
+      <summary>Known limitations</summary>
+      <ul class="stack tight">
       <li>
         <strong>Memory never comes back down</strong>
         <p>Go's <code>plugin</code> package can't unload a <code>.so</code> — roughly 1–1.4 MB of RSS per <em>distinct</em> cell. Only restarting the kernel reclaims it; structural to <code>-buildmode=plugin</code>.</p>
@@ -728,7 +772,8 @@ go build -o gocell-install ./cmd/gocell-install
         <strong>A new cell's first run includes compile time</strong>
         <p>A fresh kernel to first <code>hello world</code>: 2446 ms cold, 1031 ms with Go's build cache warm (gonb 1386/811 ms, gophernotes — which interprets — 807/563 ms). Every later run of an unchanged cell is nearly free.</p>
       </li>
-    </ul>
+      </ul>
+    </details>
   </section>
 
 </main>
@@ -763,6 +808,8 @@ go build -o gocell-install ./cmd/gocell-install
 
     var NB_MAX_CELLS = 24;   // 12 In/Out pairs
     var REPL_MAX_LINES = 80;
+    var MAX_AUTO_RUNS = 3;   // enough reads to show the value moving, then it rests
+    var autoRuns = 0;
 
     var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -824,36 +871,44 @@ go build -o gocell-install ./cmd/gocell-install
     if (!reduceMotion) {
       (function schedule() {
         setTimeout(function () {
-          if (!document.hidden) { runCell(); }
-          schedule();
+          if (!document.hidden) {
+            runCell();
+            autoRuns++;
+          }
+          // Stops after MAX_AUTO_RUNS; the Run button keeps working for anyone who wants more.
+          if (autoRuns < MAX_AUTO_RUNS) { schedule(); }
         }, 3000 + Math.random() * 7000);
       })();
     }
   })();
 
-  (function () {
-    var tabs = [
-      { tab: document.getElementById('tab-nb'),   panel: document.getElementById('panel-nb') },
-      { tab: document.getElementById('tab-repl'), panel: document.getElementById('panel-repl') }
-    ];
+  // Both switches on the page -- the hero's and the installer's -- are the same widget.
+  function wireTabs(pairs) {
     function select(i) {
-      tabs.forEach(function (t, j) {
+      pairs.forEach(function (t, j) {
         t.tab.setAttribute('aria-selected', j === i ? 'true' : 'false');
         t.panel.hidden = j !== i;
       });
     }
-    tabs.forEach(function (t, i) {
+    pairs.forEach(function (t, i) {
       t.tab.addEventListener('click', function () { select(i); });
       t.tab.addEventListener('keydown', function (e) {
         if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
           e.preventDefault();
-          var next = (i + 1) % tabs.length;
+          var next = (i + 1) % pairs.length;
           select(next);
-          tabs[next].tab.focus();
+          pairs[next].tab.focus();
         }
       });
     });
-  })();
+  }
+
+  function pair(tabId, panelId) {
+    return { tab: document.getElementById(tabId), panel: document.getElementById(panelId) };
+  }
+
+  wireTabs([pair('tab-nb', 'panel-nb'), pair('tab-repl', 'panel-repl')]);
+  wireTabs([pair('itab-nb', 'ipanel-nb'), pair('itab-repl', 'ipanel-repl')]);
 
   document.querySelectorAll('.copy-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
